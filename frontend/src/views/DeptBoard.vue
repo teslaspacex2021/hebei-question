@@ -1,11 +1,18 @@
 <template>
   <div>
-    <!-- 部门选择 -->
+    <!-- 组织筛选 -->
     <div class="filter-bar" style="margin-bottom: 12px;">
       <span style="font-size: 13px; font-weight: 600; color: #333; margin-right: 8px;">部门看板</span>
-      <el-select v-model="selectedDept" placeholder="选择部门" size="default" style="width: 160px;">
-        <el-option v-for="d in deptOptions" :key="d" :label="d" :value="d" />
-      </el-select>
+      <el-cascader
+        v-model="selectedOrg"
+        :options="orgOptions"
+        :props="{ checkStrictly: true, expandTrigger: 'hover' }"
+        placeholder="组织筛选"
+        size="default"
+        clearable
+        style="width: 240px;"
+        @change="onOrgChange"
+      />
       <div style="flex: 1;"></div>
       <el-radio-group v-model="viewMode" size="default">
         <el-radio-button value="detail">明细视图</el-radio-button>
@@ -201,9 +208,10 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import * as echarts from 'echarts'
-import { mockIssues, deptStats } from '../mock/data'
+import { mockIssues, deptStats, organizations } from '../mock/data'
 import { Download, Upload } from '@element-plus/icons-vue'
 
+const selectedOrg = ref(['province', 'it'])
 const selectedDept = ref('信息技术部')
 const viewMode = ref('detail')
 const showOnlyVisible = ref(false)
@@ -211,7 +219,22 @@ const summaryPeriod = ref('q1')
 const deptChartRef = ref(null)
 const satisfactionChartRef = ref(null)
 
-const deptOptions = deptStats.map(d => d.dept)
+const orgOptions = organizations.map(org => ({
+  value: org.value,
+  label: org.label,
+  children: org.children?.map(c => ({ value: c.value, label: c.label })),
+}))
+
+function onOrgChange(val) {
+  if (val && val.length === 2) {
+    const org = organizations.find(o => o.value === val[0])
+    const dept = org?.children?.find(c => c.value === val[1])
+    if (dept) selectedDept.value = dept.label
+  } else if (val && val.length === 1) {
+    selectedDept.value = ''
+  }
+}
+
 const allDeptStats = ref(deptStats)
 
 const periodLabels = { q1: '一季度', h1: '上半年', q3: '三季度', full: '全年' }
@@ -219,9 +242,11 @@ const periodLabels = { q1: '一季度', h1: '上半年', q3: '三季度', full: 
 const currentDeptStats = computed(() => deptStats.find(d => d.dept === selectedDept.value))
 
 const deptIssues = computed(() => {
-  let list = mockIssues.filter(i => i.department === selectedDept.value)
+  if (!selectedDept.value) {
+    return mockIssues.map(i => ({ ...i, provinceVisible: i.status === 'completed' }))
+  }
+  return mockIssues.filter(i => i.department === selectedDept.value)
     .map(i => ({ ...i, provinceVisible: i.status === 'completed' }))
-  return list
 })
 
 const completionRate = computed(() => {

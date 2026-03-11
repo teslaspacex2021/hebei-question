@@ -23,6 +23,59 @@ export const departments = [
   { value: 'logistics', label: '行政后勤部' },
 ]
 
+// ===== 组织架构（一级：省公司+地市，二级：部门）=====
+export const organizations = [
+  {
+    value: 'province',
+    label: '河北电信省公司',
+    children: [
+      { value: 'office', label: '综合办公室' },
+      { value: 'strategy', label: '战略发展部' },
+      { value: 'market', label: '市场经营部' },
+      { value: 'network', label: '网络运维部' },
+      { value: 'it', label: '信息技术部' },
+      { value: 'hr', label: '人力资源部' },
+      { value: 'finance', label: '财务管理部' },
+      { value: 'customer', label: '客户服务部' },
+      { value: 'security', label: '安全保卫部' },
+      { value: 'logistics', label: '行政后勤部' },
+    ],
+  },
+  {
+    value: 'sjz', label: '石家庄分公司',
+    children: [
+      { value: 'sjz_market', label: '市场经营部' },
+      { value: 'sjz_network', label: '网络运维部' },
+      { value: 'sjz_customer', label: '客户服务部' },
+      { value: 'sjz_office', label: '综合办公室' },
+    ],
+  },
+  {
+    value: 'bd', label: '保定分公司',
+    children: [
+      { value: 'bd_market', label: '市场经营部' },
+      { value: 'bd_network', label: '网络运维部' },
+      { value: 'bd_customer', label: '客户服务部' },
+    ],
+  },
+  {
+    value: 'ts', label: '唐山分公司',
+    children: [
+      { value: 'ts_market', label: '市场经营部' },
+      { value: 'ts_network', label: '网络运维部' },
+      { value: 'ts_customer', label: '客户服务部' },
+    ],
+  },
+  { value: 'hd', label: '邯郸分公司', children: [{ value: 'hd_market', label: '市场经营部' }, { value: 'hd_network', label: '网络运维部' }] },
+  { value: 'cd', label: '承德分公司', children: [{ value: 'cd_market', label: '市场经营部' }, { value: 'cd_network', label: '网络运维部' }] },
+  { value: 'lf', label: '廊坊分公司', children: [{ value: 'lf_market', label: '市场经营部' }, { value: 'lf_security', label: '安全保卫部' }] },
+  { value: 'cz', label: '沧州分公司', children: [{ value: 'cz_market', label: '市场经营部' }, { value: 'cz_hr', label: '人力资源部' }] },
+  { value: 'xt', label: '邢台分公司', children: [{ value: 'xt_market', label: '市场经营部' }, { value: 'xt_network', label: '网络运维部' }] },
+  { value: 'qhd', label: '秦皇岛分公司', children: [{ value: 'qhd_market', label: '市场经营部' }, { value: 'qhd_network', label: '网络运维部' }] },
+  { value: 'zjk', label: '张家口分公司', children: [{ value: 'zjk_market', label: '市场经营部' }, { value: 'zjk_strategy', label: '战略发展部' }] },
+  { value: 'hs', label: '衡水分公司', children: [{ value: 'hs_market', label: '市场经营部' }] },
+]
+
 // ===== 流程节点 =====
 export const flowNodes = [
   { value: 'initiate', label: '发起', color: '#409EFF' },

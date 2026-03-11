@@ -129,15 +129,9 @@
         </div>
         <div class="table-card">
           <div class="table-header">
-            <span class="table-title">阶段总结</span>
+            <span class="table-title">各部门完成率</span>
           </div>
-          <div style="padding: 12px 16px;">
-            <div v-for="item in summaries" :key="item.id" style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0;">
-              <div style="font-size: 13px; font-weight: 600; color: #333; margin-bottom: 4px;">{{ item.title }}</div>
-              <div style="font-size: 12px; color: #999;">{{ item.department }} · {{ item.author }} · {{ item.createDate }}</div>
-              <div style="font-size: 12px; color: #666; margin-top: 4px; line-height: 1.6;">{{ item.content }}</div>
-            </div>
-          </div>
+          <div ref="deptBarRef" class="chart-container" style="height: 250px;"></div>
         </div>
       </el-col>
     </el-row>
@@ -147,10 +141,10 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
-import { mockIssues, issueCategories, flowNodes, stageSummaries } from '../mock/data'
+import { mockIssues, issueCategories, flowNodes, deptStats } from '../mock/data'
 
 const chartRef = ref(null)
-const summaries = ref(stageSummaries)
+const deptBarRef = ref(null)
 
 // 统计数据
 const totalIssues = computed(() => mockIssues.length)
@@ -199,5 +193,26 @@ onMounted(async () => {
     color: ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#722ED1', '#13C2C2'],
   })
   window.addEventListener('resize', () => chart.resize())
+
+  if (deptBarRef.value) {
+    const chart2 = echarts.init(deptBarRef.value)
+    const topDepts = deptStats.slice(0, 8)
+    chart2.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: 80, right: 20, top: 10, bottom: 30 },
+      xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+      yAxis: { type: 'category', data: topDepts.map(d => d.dept), axisLabel: { fontSize: 11 } },
+      series: [{
+        type: 'bar',
+        data: topDepts.map(d => d.total > 0 ? Math.round(d.completed / d.total * 100) : 0),
+        itemStyle: {
+          color: (params) => params.value >= 80 ? '#67C23A' : params.value >= 50 ? '#409EFF' : '#F56C6C',
+        },
+        label: { show: true, position: 'right', fontSize: 11, formatter: '{c}%' },
+        barWidth: 14,
+      }],
+    })
+    window.addEventListener('resize', () => chart2.resize())
+  }
 })
 </script>

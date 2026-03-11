@@ -52,9 +52,15 @@
       <el-select v-model="filterCategory" placeholder="问题分类" size="default" clearable style="width: 120px;">
         <el-option v-for="c in categories" :key="c.value" :label="c.label" :value="c.value" />
       </el-select>
-      <el-select v-model="filterDept" placeholder="部门" size="default" clearable style="width: 120px;">
-        <el-option v-for="d in departments" :key="d.value" :label="d.label" :value="d.value" />
-      </el-select>
+      <el-cascader
+        v-model="filterOrg"
+        :options="orgOptions"
+        :props="{ checkStrictly: true, expandTrigger: 'hover' }"
+        placeholder="组织筛选"
+        size="default"
+        clearable
+        style="width: 200px;"
+      />
       <div style="flex: 1;"></div>
       <el-button type="warning" size="default" @click="showAISummary = true">
         <el-icon><MagicStick /></el-icon> AI总结
@@ -246,24 +252,6 @@
       </div>
     </template>
 
-    <!-- 阶段总结 -->
-    <div class="table-card" style="margin-top: 12px;">
-      <div class="table-header">
-        <span class="table-title">阶段性调研问题总结</span>
-      </div>
-      <div style="padding: 12px 16px;">
-        <div v-for="item in summaries" :key="item.id"
-          style="padding: 12px; margin-bottom: 8px; background: #fafafa; border-radius: 4px; border: 1px solid #f0f0f0;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <span style="font-size: 14px; font-weight: 600;">{{ item.title }}</span>
-            <el-tag size="small">{{ item.period }}</el-tag>
-          </div>
-          <div style="font-size: 12px; color: #999; margin-bottom: 6px;">{{ item.department }} · {{ item.author }} · {{ item.createDate }}</div>
-          <div style="font-size: 13px; color: #666; line-height: 1.6;">{{ item.content }}</div>
-        </div>
-      </div>
-    </div>
-
     <!-- AI总结弹窗 -->
     <el-dialog v-model="showAISummary" title="AI智能总结" width="600px">
       <div style="margin-bottom: 16px;">
@@ -300,15 +288,21 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Download, MagicStick } from '@element-plus/icons-vue'
 import {
-  mockIssues, issueCategories, departments, flowNodes, stageSummaries,
-  supervisionOrders as svOrdersData, surveyBatches
+  mockIssues, issueCategories, departments, flowNodes,
+  supervisionOrders as svOrdersData, surveyBatches, organizations
 } from '../mock/data'
 
 const viewMode = ref('detail')
 const searchText = ref('')
 const filterCategory = ref('')
-const filterDept = ref('')
+const filterOrg = ref([])
 const filterDeptQuick = ref('')
+
+const orgOptions = organizations.map(org => ({
+  value: org.value,
+  label: org.label,
+  children: org.children?.map(c => ({ value: c.value, label: c.label })),
+}))
 const dateRange = ref(null)
 const showAISummary = ref(false)
 const aiDateRange = ref(null)
@@ -317,7 +311,6 @@ const aiResult = ref(false)
 const expandBatch = ref('')
 
 const categories = issueCategories
-const summaries = stageSummaries
 const svOrders = ref(svOrdersData)
 const topDepts = ['网络运维部', '信息技术部', '客户服务部', '市场经营部', '战略发展部', '安全保卫部', '人力资源部', '行政后勤部']
 
@@ -356,9 +349,13 @@ const filteredIssues = computed(() => {
   let list = allIssues.value
   if (searchText.value) list = list.filter(i => i.title.includes(searchText.value))
   if (filterCategory.value) list = list.filter(i => i.category === filterCategory.value)
-  if (filterDept.value) {
-    const deptLabel = departments.find(d => d.value === filterDept.value)?.label
-    list = list.filter(i => i.department === deptLabel)
+  if (filterOrg.value && filterOrg.value.length > 0) {
+    const orgVal = filterOrg.value
+    if (orgVal.length === 2) {
+      const org = organizations.find(o => o.value === orgVal[0])
+      const dept = org?.children?.find(c => c.value === orgVal[1])
+      if (dept) list = list.filter(i => i.department === dept.label)
+    }
   }
   if (filterDeptQuick.value) list = list.filter(i => i.department === filterDeptQuick.value)
   return list

@@ -18,37 +18,60 @@
       </div>
     </div>
 
-    <!-- 统计卡片 -->
+    <!-- 统计卡片（与工作台一致，按问题状态） -->
     <div class="stats-row">
       <div class="stat-card" style="cursor: pointer;" @click="activeTab = 'all'">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #1890FF; font-size: 26px;">{{ totalCount }}</div>
-          <div class="stat-label">全部</div>
-          <div style="font-size: 11px; color: #999; margin-top: 2px;">待接受 {{ pendingAcceptCount }} 进行中 {{ inProgressCount }}</div>
+        <div class="stat-icon" style="background: #E6F7FF; color: #1890FF;">
+          <el-icon :size="22"><Document /></el-icon>
+        </div>
+        <div class="stat-info">
+          <div class="stat-value" style="color: #1890FF;">{{ totalCount }}</div>
+          <div class="stat-label">全部问题</div>
+        </div>
+      </div>
+      <div class="stat-card" style="cursor: pointer;" @click="activeTab = 'pending'">
+        <div class="stat-icon" style="background: #FFF7E6; color: #D48806;">
+          <el-icon :size="22"><Clock /></el-icon>
+        </div>
+        <div class="stat-info">
+          <div class="stat-value" style="color: #D48806;">{{ pendingAcceptCount }}</div>
+          <div class="stat-label">待处理</div>
+        </div>
+      </div>
+      <div class="stat-card" style="cursor: pointer;" @click="activeTab = 'in_progress'">
+        <div class="stat-icon" style="background: #E6F7FF; color: #1890FF;">
+          <el-icon :size="22"><Loading /></el-icon>
+        </div>
+        <div class="stat-info">
+          <div class="stat-value" style="color: #1890FF;">{{ inProgressCount }}</div>
+          <div class="stat-label">解决中</div>
         </div>
       </div>
       <div class="stat-card" style="cursor: pointer;" @click="activeTab = 'completed'">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #52C41A; font-size: 26px;">{{ completedCount }}</div>
-          <div class="stat-label">已完结</div>
+        <div class="stat-icon" style="background: #F6FFED; color: #52C41A;">
+          <el-icon :size="22"><CircleCheck /></el-icon>
+        </div>
+        <div class="stat-info">
+          <div class="stat-value" style="color: #52C41A;">{{ completedCount }}</div>
+          <div class="stat-label">已完成</div>
         </div>
       </div>
       <div class="stat-card" style="cursor: pointer;">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #F5222D; font-size: 26px;">{{ overdueCount }}</div>
+        <div class="stat-icon" style="background: #FFF1F0; color: #F5222D;">
+          <el-icon :size="22"><WarningFilled /></el-icon>
+        </div>
+        <div class="stat-info">
+          <div class="stat-value" style="color: #F5222D;">{{ overdueCount }}</div>
           <div class="stat-label">已超期</div>
         </div>
       </div>
       <div class="stat-card" style="cursor: pointer;">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #D48806; font-size: 26px;">0</div>
-          <div class="stat-label">逾期更新</div>
+        <div class="stat-icon" style="background: #F0E6FF; color: #722ED1;">
+          <el-icon :size="22"><StarFilled /></el-icon>
         </div>
-      </div>
-      <div class="stat-card" style="cursor: pointer;">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #722ED1; font-size: 26px;">{{ supervisedCount }}</div>
-          <div class="stat-label">超期未更新</div>
+        <div class="stat-info">
+          <div class="stat-value" style="color: #722ED1;">{{ avgSatisfaction }}</div>
+          <div class="stat-label">平均满意度</div>
         </div>
       </div>
     </div>
@@ -346,21 +369,25 @@ const progressForm = ref({
 })
 
 const tabs = [
-  { value: 'all', label: '全部' },
-  { value: 'mine', label: '我负责的' },
-  { value: 'handle', label: '我处理的' },
-  { value: 'created', label: '我创建的' },
-  { value: 'watched', label: '我关注的' },
+  { value: 'all', label: '全部问题' },
+  { value: 'pending', label: '待处理' },
+  { value: 'in_progress', label: '解决中' },
+  { value: 'completed', label: '已完成' },
+  { value: 'supervised', label: '已督办' },
 ]
 
 const responsibleList = computed(() => [...new Set(mockIssues.map(i => i.responsible))])
 
 const filteredIssues = computed(() => {
   let list = [...mockIssues]
-  if (activeTab.value === 'completed') {
+  if (activeTab.value === 'pending') {
+    list = list.filter(i => i.status === 'pending')
+  } else if (activeTab.value === 'in_progress') {
+    list = list.filter(i => i.status === 'in_progress')
+  } else if (activeTab.value === 'completed') {
     list = list.filter(i => i.status === 'completed')
-  } else if (activeTab.value === 'mine') {
-    list = list.filter(i => i.responsible === '段磊')
+  } else if (activeTab.value === 'supervised') {
+    list = list.filter(i => i.supervised)
   }
   if (searchText.value) {
     list = list.filter(i => i.title.includes(searchText.value))
@@ -377,6 +404,11 @@ const inProgressCount = computed(() => mockIssues.filter(i => i.status === 'in_p
 const completedCount = computed(() => mockIssues.filter(i => i.status === 'completed').length)
 const overdueCount = computed(() => mockIssues.filter(i => i.status === 'overdue').length)
 const supervisedCount = computed(() => mockIssues.filter(i => i.supervised).length)
+const avgSatisfaction = computed(() => {
+  const rated = mockIssues.filter(i => i.satisfaction > 0)
+  if (rated.length === 0) return '—'
+  return (rated.reduce((s, i) => s + i.satisfaction, 0) / rated.length).toFixed(1)
+})
 
 // 当前问题的进展记录
 const currentLogs = computed(() => {

@@ -1,6 +1,5 @@
 <template>
   <div class="app-layout">
-    <!-- 侧边栏 -->
     <aside class="sidebar">
       <div class="sidebar-logo">
         <div class="logo-icon">调</div>
@@ -33,20 +32,9 @@
           <el-icon><Calendar /></el-icon>
           <span>调研计划</span>
         </el-menu-item>
-        <el-sub-menu index="settings">
-          <template #title>
-            <el-icon><Setting /></el-icon>
-            <span>系统管理</span>
-          </template>
-          <el-menu-item index="/settings/users">用户管理</el-menu-item>
-          <el-menu-item index="/settings/roles">角色管理</el-menu-item>
-          <el-menu-item index="/settings/org">组织架构</el-menu-item>
-          <el-menu-item index="/settings/flow">流程配置</el-menu-item>
-        </el-sub-menu>
       </el-menu>
     </aside>
 
-    <!-- 主内容区 -->
     <section class="main-area">
       <header class="top-header">
         <span class="page-title">{{ currentPageTitle }}</span>
