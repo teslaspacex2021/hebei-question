@@ -6,6 +6,8 @@ export const issueCategories = [
   { value: 'service', label: '客户服务类' },
   { value: 'security', label: '大安全类' },
   { value: 'logistics', label: '大后勤类' },
+  { value: 'performance', label: '绩效考核类' },
+  { value: 'foundation', label: '基础管理类' },
   { value: 'other', label: '其他类' },
 ]
 
@@ -121,6 +123,13 @@ export const mockIssues = [
     supervised: false,
     replyContent: '',
     expectedComplete: '2026-03-15',
+    pinned: true,
+    resolved: false,
+    subIssues: [
+      { id: 'DY2026020001-1', title: '裕华区5G信号盲区排查', handler: '王志成', status: 'in_progress', statusLabel: '解决中', progress: 80, deadline: '2026-03-01' },
+      { id: 'DY2026020001-2', title: '长安区基站扩容方案', handler: '段磊', status: 'in_progress', statusLabel: '解决中', progress: 60, deadline: '2026-03-10' },
+      { id: 'DY2026020001-3', title: '新华区网络质量优化', handler: '王志成', status: 'pending', statusLabel: '待处理', progress: 20, deadline: '2026-03-15' },
+    ],
   },
   {
     id: 'DY2026020002',
@@ -145,6 +154,12 @@ export const mockIssues = [
     supervised: false,
     replyContent: '',
     expectedComplete: '2026-02-28',
+    pinned: false,
+    resolved: false,
+    subIssues: [
+      { id: 'DY2026020002-1', title: '投诉处理SOP修订', handler: '何天坤', status: 'completed', statusLabel: '已完成', progress: 100, deadline: '2026-02-15' },
+      { id: 'DY2026020002-2', title: '投诉处理系统改造', handler: '何天坤', status: 'in_progress', statusLabel: '解决中', progress: 70, deadline: '2026-02-25' },
+    ],
   },
   {
     id: 'DY2026020003',
@@ -737,7 +752,7 @@ export const surveyBatches = [
   },
 ]
 
-// ===== 阶段总结数据 =====
+// ===== 阶段总结数据（保留但不再在部门看板中显示） =====
 export const stageSummaries = [
   {
     id: 1,
@@ -756,5 +771,91 @@ export const stageSummaries = [
     author: '周波',
     createDate: '2026-01-15',
     content: '张总2025年度共调研12个地市，收集问题86个，其中战略规划类22个、经营业务类35个、技术类18个、其他11个。',
+  },
+]
+
+// ===== 调研计划待办数据（每年1月1日系统自动为每个部门生成2条待办）=====
+export const planTodos = [
+  {
+    id: 'TB2026010001',
+    department: '信息技术部',
+    title: '2026年上半年调研计划填报',
+    type: 'first_half',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-01-01',
+    content: '',
+  },
+  {
+    id: 'TB2026010002',
+    department: '信息技术部',
+    title: '2026年下半年调研计划填报',
+    type: 'second_half',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-01-01',
+    content: '',
+  },
+  {
+    id: 'TB2026010003',
+    department: '网络运维部',
+    title: '2026年上半年调研计划填报',
+    type: 'first_half',
+    status: 'completed',
+    statusLabel: '已完成',
+    createDate: '2026-01-01',
+    content: '已完成上半年调研计划填报，计划调研石家庄、保定、唐山3个地市。',
+    submitDate: '2026-01-15',
+  },
+  {
+    id: 'TB2026010004',
+    department: '网络运维部',
+    title: '2026年下半年调研计划填报',
+    type: 'second_half',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-01-01',
+    content: '',
+  },
+  {
+    id: 'TB2026010005',
+    department: '市场经营部',
+    title: '2026年上半年调研计划填报',
+    type: 'first_half',
+    status: 'completed',
+    statusLabel: '已完成',
+    createDate: '2026-01-01',
+    content: '上半年计划调研邯郸、邢台、沧州3个地市，重点关注渠道建设和业务发展。',
+    submitDate: '2026-01-10',
+  },
+  {
+    id: 'TB2026010006',
+    department: '市场经营部',
+    title: '2026年下半年调研计划填报',
+    type: 'second_half',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-01-01',
+    content: '',
+  },
+  {
+    id: 'TB2026010007',
+    department: '客户服务部',
+    title: '2026年上半年调研计划填报',
+    type: 'first_half',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-01-01',
+    content: '',
+  },
+  {
+    id: 'TB2026010008',
+    department: '客户服务部',
+    title: '2026年下半年调研计划填报',
+    type: 'second_half',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-01-01',
+    content: '',
   },
 ]

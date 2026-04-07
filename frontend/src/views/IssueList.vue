@@ -130,6 +130,7 @@
         <el-table-column prop="title" label="问题名称" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <div style="display: flex; align-items: center; gap: 6px;">
+              <el-icon v-if="row.pinned" :size="14" style="color: #E6A23C;" title="置顶"><Top /></el-icon>
               <el-icon v-if="row.supervised" :size="14" style="color: #F56C6C;"><Warning /></el-icon>
               <span style="cursor: pointer; color: #333;">{{ row.title }}</span>
             </div>
@@ -174,18 +175,11 @@
           <template #default="{ row }">
             <div class="action-btns">
               <el-button
-                v-if="row.status !== 'completed'"
                 type="primary"
                 link
                 size="small"
                 @click.stop="openProgressDialog(row)"
               >更新进展</el-button>
-              <el-button
-                v-else
-                type="success"
-                link
-                size="small"
-              >重启</el-button>
               <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, row)">
                 <el-button link size="small" @click.stop>
                   <el-icon><MoreFilled /></el-icon>
@@ -194,6 +188,7 @@
                   <el-dropdown-menu>
                     <el-dropdown-item command="detail">查看详情</el-dropdown-item>
                     <el-dropdown-item command="edit">编辑</el-dropdown-item>
+                    <el-dropdown-item command="pin">{{ row.pinned ? '取消置顶' : '置顶' }}</el-dropdown-item>
                     <el-dropdown-item v-if="row.status !== 'completed'" command="supervise">督办</el-dropdown-item>
                     <el-dropdown-item divided command="delete" style="color: #F56C6C;">删除</el-dropdown-item>
                   </el-dropdown-menu>
@@ -216,107 +211,33 @@
       </div>
     </div>
 
-    <!-- ========== 问题详情抽屉（加宽+流程图+进展记录） ========== -->
-    <el-drawer v-model="detailVisible" :title="currentIssue?.title" size="720px" :destroy-on-close="true">
-      <template v-if="currentIssue">
-        <!-- 流程图 -->
-        <div style="margin-bottom: 20px;">
-          <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #409EFF;">流程进度</div>
-          <div class="flow-chart-container">
-            <div v-for="(node, idx) in allFlowNodes" :key="node.value" class="flow-node-wrapper">
-              <div :class="['flow-node-circle', getNodeStatus(node.value, currentIssue.flowNode)]">
-                <span class="flow-node-idx">{{ idx + 1 }}</span>
-              </div>
-              <div class="flow-node-label" :class="{ active: node.value === currentIssue.flowNode }">{{ node.label }}</div>
-              <div v-if="idx < allFlowNodes.length - 1" :class="['flow-node-line', { done: isNodeDone(node.value, currentIssue.flowNode) }]"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 基本信息 -->
-        <div style="margin-bottom: 20px;">
-          <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #409EFF;">基本信息</div>
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">问题编号</span><span class="detail-value">{{ currentIssue.id }}</span></div>
-              <div class="detail-item"><span class="detail-label">问题分类</span><span class="detail-value">{{ currentIssue.categoryLabel }}</span></div>
-              <div class="detail-item"><span class="detail-label">所属部门</span><span class="detail-value">{{ currentIssue.department }}</span></div>
-              <div class="detail-item"><span class="detail-label">负责人</span><span class="detail-value">{{ currentIssue.responsible }}</span></div>
-              <div class="detail-item"><span class="detail-label">当前处理人</span><span class="detail-value">{{ currentIssue.handler || '—' }}</span></div>
-            </el-col>
-            <el-col :span="12">
-              <div class="detail-item"><span class="detail-label">当前状态</span><span class="detail-value"><span :class="'status-tag status-' + currentIssue.status">{{ currentIssue.statusLabel }}</span></span></div>
-              <div class="detail-item"><span class="detail-label">流程节点</span><span class="detail-value">{{ currentIssue.flowNodeLabel }}</span></div>
-              <div class="detail-item"><span class="detail-label">调研日期</span><span class="detail-value">{{ currentIssue.surveyDate }}</span></div>
-              <div class="detail-item"><span class="detail-label">调研地点</span><span class="detail-value">{{ currentIssue.surveyLocation }}</span></div>
-              <div class="detail-item"><span class="detail-label">截止日期</span><span class="detail-value" :style="{ color: isDeadlineNear(currentIssue) ? '#F5222D' : '' }">{{ currentIssue.deadline }}</span></div>
-            </el-col>
-          </el-row>
-          <div class="detail-item" style="margin-top: 4px;">
-            <span class="detail-label">进度</span>
-            <span class="detail-value"><el-progress :percentage="currentIssue.progress" :stroke-width="10" style="width: 300px;" /></span>
-          </div>
-          <div class="detail-item" v-if="currentIssue.replyContent">
-            <span class="detail-label">答复内容</span>
-            <span class="detail-value">{{ currentIssue.replyContent }}</span>
-          </div>
-          <div class="detail-item" v-if="currentIssue.satisfaction > 0">
-            <span class="detail-label">满意度</span>
-            <span class="detail-value"><el-rate v-model="currentIssue.satisfaction" disabled /></span>
-          </div>
-          <div class="detail-item" v-if="currentIssue.supervised">
-            <span class="detail-label">督办状态</span>
-            <span class="detail-value supervise-badge"><el-icon><Warning /></el-icon> 已被督办</span>
-          </div>
-        </div>
-
-        <!-- 进展更新记录 -->
-        <div>
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #409EFF;">
-            <span style="font-size: 14px; font-weight: 600; color: #333;">进展更新记录</span>
-            <el-button v-if="currentIssue.status !== 'completed'" type="primary" size="small" @click="openProgressDialog(currentIssue)">
-              <el-icon><EditPen /></el-icon> 更新进展
-            </el-button>
-          </div>
-          <el-timeline v-if="currentLogs.length > 0">
-            <el-timeline-item
-              v-for="log in currentLogs"
-              :key="log.id"
-              :timestamp="log.date"
-              placement="top"
-              :color="'#409EFF'"
-            >
-              <div style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; border: 1px solid #e8e8e8;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                  <span style="font-size: 13px; font-weight: 600; color: #333;">{{ log.user }}</span>
-                  <span style="font-size: 12px; color: #999;">进度: {{ log.progress }}%</span>
-                </div>
-                <div style="font-size: 13px; color: #666; line-height: 1.6;">{{ log.content }}</div>
-              </div>
-            </el-timeline-item>
-          </el-timeline>
-          <el-empty v-else description="暂无进展更新记录" :image-size="60" />
-        </div>
-      </template>
-    </el-drawer>
-
-    <!-- ========== 更新进展弹框 ========== -->
-    <el-dialog v-model="progressDialogVisible" title="更新进展" width="520px" :close-on-click-modal="false">
+    <!-- ========== 更新进展弹框（支持主动/例行区分 + 延期） ========== -->
+    <el-dialog v-model="progressDialogVisible" title="更新进展" width="560px" :close-on-click-modal="false">
       <div v-if="progressForm.issue" style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;">
         <div style="font-size: 13px; color: #333; font-weight: 600;">{{ progressForm.issue.title }}</div>
-        <div style="font-size: 12px; color: #999; margin-top: 4px;">{{ progressForm.issue.id }} · {{ progressForm.issue.department }}</div>
+        <div style="font-size: 12px; color: #999; margin-top: 4px;">{{ progressForm.issue.id }} | {{ progressForm.issue.department }}</div>
       </div>
-      <el-form label-width="80px" size="default">
+      <el-form label-width="90px" size="default">
         <el-form-item label="当前进度" required>
           <el-slider v-model="progressForm.progress" :min="0" :max="100" show-input style="padding-right: 20px;" />
         </el-form-item>
         <el-form-item label="进展描述" required>
           <el-input v-model="progressForm.content" type="textarea" :rows="4" placeholder="请输入进展描述内容..." />
         </el-form-item>
-        <el-form-item label="进展状态">
+        <el-form-item label="问题状态">
           <el-radio-group v-model="progressForm.status">
             <el-radio value="in_progress">解决中</el-radio>
             <el-radio value="completed">已完成</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="progressForm.issue && isIssueOverdue(progressForm.issue) && progressForm.status !== 'completed' && !progressForm.issue.delayedDeadline" label="延期时间">
+          <el-date-picker v-model="progressForm.delayedDeadline" type="date" placeholder="选择新的截止日期" style="width: 100%;" />
+          <div style="font-size: 11px; color: #E6A23C; margin-top: 4px;">已超截止时间，可申请延期（仅支持修改一次）</div>
+        </el-form-item>
+        <el-form-item label="更新类型">
+          <el-radio-group v-model="progressForm.updateType">
+            <el-radio value="proactive">主动更新</el-radio>
+            <el-radio value="routine">例行更新</el-radio>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="附件">
@@ -335,30 +256,19 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Filter, Setting, Plus, MoreFilled, EditPen, Upload } from '@element-plus/icons-vue'
+import { Search, Filter, Setting, Plus, MoreFilled, EditPen, Upload, Top } from '@element-plus/icons-vue'
 import { mockIssues, flowNodes, progressLogs } from '../mock/data'
 
+const router = useRouter()
 const activeTab = ref('all')
 const searchText = ref('')
 const filterDept = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
-const detailVisible = ref(false)
-const currentIssue = ref(null)
 const progressDialogVisible = ref(false)
-
-// 完整流程节点列表
-const allFlowNodes = [
-  { value: 'initiate', label: '发起' },
-  { value: 'dept_review', label: '部门主任审核' },
-  { value: 'accept_review', label: '接单部门审核' },
-  { value: 'level1', label: '一级办理(副主任)' },
-  { value: 'level2', label: '二级办理(主管)' },
-  { value: 'accept_confirm', label: '接单部门确认' },
-  { value: 'initiator_confirm', label: '发起人确认' },
-  { value: 'completed', label: '已完结' },
-]
+const localIssues = ref([...mockIssues])
 
 // 进展更新表单
 const progressForm = ref({
@@ -366,6 +276,8 @@ const progressForm = ref({
   progress: 0,
   content: '',
   status: 'in_progress',
+  updateType: 'proactive',
+  delayedDeadline: null,
 })
 
 const tabs = [
@@ -376,10 +288,10 @@ const tabs = [
   { value: 'supervised', label: '已督办' },
 ]
 
-const responsibleList = computed(() => [...new Set(mockIssues.map(i => i.responsible))])
+const responsibleList = computed(() => [...new Set(localIssues.value.map(i => i.responsible))])
 
 const filteredIssues = computed(() => {
-  let list = [...mockIssues]
+  let list = [...localIssues.value]
   if (activeTab.value === 'pending') {
     list = list.filter(i => i.status === 'pending')
   } else if (activeTab.value === 'in_progress') {
@@ -395,25 +307,24 @@ const filteredIssues = computed(() => {
   if (filterDept.value) {
     list = list.filter(i => i.responsible === filterDept.value)
   }
-  return list.sort((a, b) => b.updateDate.localeCompare(a.updateDate))
+  // 置顶问题排在前面
+  return list.sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1
+    if (!a.pinned && b.pinned) return 1
+    return b.updateDate.localeCompare(a.updateDate)
+  })
 })
 
-const totalCount = computed(() => mockIssues.length)
-const pendingAcceptCount = computed(() => mockIssues.filter(i => i.status === 'pending').length)
-const inProgressCount = computed(() => mockIssues.filter(i => i.status === 'in_progress').length)
-const completedCount = computed(() => mockIssues.filter(i => i.status === 'completed').length)
-const overdueCount = computed(() => mockIssues.filter(i => i.status === 'overdue').length)
-const supervisedCount = computed(() => mockIssues.filter(i => i.supervised).length)
+const totalCount = computed(() => localIssues.value.length)
+const pendingAcceptCount = computed(() => localIssues.value.filter(i => i.status === 'pending').length)
+const inProgressCount = computed(() => localIssues.value.filter(i => i.status === 'in_progress').length)
+const completedCount = computed(() => localIssues.value.filter(i => i.status === 'completed').length)
+const overdueCount = computed(() => localIssues.value.filter(i => i.status === 'overdue').length)
+const supervisedCount = computed(() => localIssues.value.filter(i => i.supervised).length)
 const avgSatisfaction = computed(() => {
-  const rated = mockIssues.filter(i => i.satisfaction > 0)
+  const rated = localIssues.value.filter(i => i.satisfaction > 0)
   if (rated.length === 0) return '—'
   return (rated.reduce((s, i) => s + i.satisfaction, 0) / rated.length).toFixed(1)
-})
-
-// 当前问题的进展记录
-const currentLogs = computed(() => {
-  if (!currentIssue.value) return []
-  return progressLogs[currentIssue.value.id] || []
 })
 
 function getFlowColor(node) {
@@ -421,24 +332,11 @@ function getFlowColor(node) {
   return fn ? fn.color : '#909399'
 }
 
-// 流程节点状态
-const nodeOrder = ['initiate', 'dept_review', 'accept_review', 'level1', 'level2', 'accept_confirm', 'initiator_confirm', 'completed']
-
-function getNodeStatus(nodeValue, currentNode) {
-  const currentIdx = nodeOrder.indexOf(currentNode)
-  const nodeIdx = nodeOrder.indexOf(nodeValue)
-  if (nodeIdx < currentIdx) return 'done'
-  if (nodeIdx === currentIdx) return 'current'
-  return 'pending'
-}
-
-function isNodeDone(nodeValue, currentNode) {
-  const currentIdx = nodeOrder.indexOf(currentNode)
-  const nodeIdx = nodeOrder.indexOf(nodeValue)
-  return nodeIdx < currentIdx
-}
-
 function isOverdue(row) {
+  return row.status !== 'completed' && new Date(row.deadline) < new Date()
+}
+
+function isIssueOverdue(row) {
   return row.status !== 'completed' && new Date(row.deadline) < new Date()
 }
 
@@ -449,13 +347,18 @@ function isDeadlineNear(row) {
 }
 
 function showDetail(row) {
-  currentIssue.value = { ...row }
-  detailVisible.value = true
+  router.push(`/issues/${row.id}`)
 }
 
 function handleCommand(cmd, row) {
   if (cmd === 'detail') {
     showDetail(row)
+  } else if (cmd === 'pin') {
+    const idx = localIssues.value.findIndex(i => i.id === row.id)
+    if (idx !== -1) {
+      localIssues.value[idx] = { ...localIssues.value[idx], pinned: !localIssues.value[idx].pinned }
+      ElMessage.success(localIssues.value[idx].pinned ? '已置顶' : '已取消置顶')
+    }
   } else if (cmd === 'supervise') {
     ElMessage.warning(`已对"${row.title}"发起督办`)
   }
@@ -467,6 +370,8 @@ function openProgressDialog(row) {
     progress: row.progress,
     content: '',
     status: 'in_progress',
+    updateType: 'proactive',
+    delayedDeadline: null,
   }
   progressDialogVisible.value = true
 }
@@ -475,6 +380,27 @@ function submitProgress() {
   if (!progressForm.value.content) {
     ElMessage.warning('请输入进展描述')
     return
+  }
+  const issue = progressForm.value.issue
+  // 处理延期
+  if (progressForm.value.delayedDeadline && !issue.delayedDeadline) {
+    const dateStr = new Date(progressForm.value.delayedDeadline).toISOString().split('T')[0]
+    const idx = localIssues.value.findIndex(i => i.id === issue.id)
+    if (idx !== -1) {
+      localIssues.value[idx] = { ...localIssues.value[idx], delayedDeadline: dateStr }
+    }
+  }
+  // 更新问题状态
+  if (progressForm.value.status === 'completed') {
+    const idx = localIssues.value.findIndex(i => i.id === issue.id)
+    if (idx !== -1) {
+      localIssues.value[idx] = { ...localIssues.value[idx], status: 'completed', statusLabel: '已完成', progress: 100 }
+    }
+  } else {
+    const idx = localIssues.value.findIndex(i => i.id === issue.id)
+    if (idx !== -1) {
+      localIssues.value[idx] = { ...localIssues.value[idx], progress: progressForm.value.progress }
+    }
   }
   ElMessage.success('进展已更新')
   progressDialogVisible.value = false

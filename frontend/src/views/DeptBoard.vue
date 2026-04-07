@@ -15,8 +15,8 @@
       />
       <div style="flex: 1;"></div>
       <el-radio-group v-model="viewMode" size="default">
+        <el-radio-button value="todo">调研计划待办</el-radio-button>
         <el-radio-button value="detail">明细视图</el-radio-button>
-        <el-radio-button value="summary">阶段总结</el-radio-button>
         <el-radio-button value="stats">统计概览</el-radio-button>
       </el-radio-group>
     </div>
@@ -123,34 +123,61 @@
       </el-table>
     </div>
 
-    <!-- 阶段总结 -->
-    <div v-if="viewMode === 'summary'">
-      <div class="filter-bar" style="margin-bottom: 12px;">
-        <el-radio-group v-model="summaryPeriod" size="default">
-          <el-radio-button value="q1">一季度</el-radio-button>
-          <el-radio-button value="h1">上半年</el-radio-button>
-          <el-radio-button value="q3">三季度</el-radio-button>
-          <el-radio-button value="full">全年</el-radio-button>
-        </el-radio-group>
-        <div style="flex: 1;"></div>
-        <el-button type="primary" size="default">
-          <el-icon><Upload /></el-icon> 上传阶段总结
-        </el-button>
-      </div>
+    <!-- 调研计划待办 -->
+    <div v-if="viewMode === 'todo'">
       <div class="table-card" style="padding: 20px;">
-        <div style="text-align: center; padding: 40px;">
-          <el-icon :size="48" style="color: #ddd; margin-bottom: 12px;"><Document /></el-icon>
-          <p style="color: #999; font-size: 14px;">{{ selectedDept }} - {{ periodLabels[summaryPeriod] }}总结</p>
-          <p style="color: #666; font-size: 13px; line-height: 1.8; max-width: 600px; margin: 12px auto;">
-            本阶段共接收调研问题 {{ currentDeptStats?.total || 0 }} 个，
-            已完成 {{ currentDeptStats?.completed || 0 }} 个，
-            完成率 {{ completionRate }}%。
-            平均满意度 {{ currentDeptStats?.satisfaction || '暂无' }}。
-            {{ currentDeptStats?.overdue > 0 ? '存在 ' + currentDeptStats.overdue + ' 个超期问题需要关注。' : '无超期问题。' }}
-          </p>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <span style="font-size: 14px; font-weight: 600; color: #333;">调研计划待办</span>
+          <span style="font-size: 12px; color: #999;">系统每年1月1日自动为每个部门发起2条待办</span>
         </div>
+        <div v-if="deptPlanTodos.length > 0">
+          <div v-for="todo in deptPlanTodos" :key="todo.id"
+            style="background: #fafafa; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #e8e8e8;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <el-icon v-if="todo.status === 'pending'" :size="18" style="color: #D48806;"><Clock /></el-icon>
+                <el-icon v-else :size="18" style="color: #52C41A;"><CircleCheck /></el-icon>
+                <span style="font-size: 14px; font-weight: 600; color: #333;">{{ todo.title }}</span>
+              </div>
+              <el-tag :type="todo.status === 'completed' ? 'success' : 'warning'" size="small">{{ todo.statusLabel }}</el-tag>
+            </div>
+            <div style="font-size: 12px; color: #999; margin-bottom: 8px;">
+              待办编号：{{ todo.id }} | 部门：{{ todo.department }} | 创建日期：{{ todo.createDate }}
+              <span v-if="todo.submitDate"> | 提交日期：{{ todo.submitDate }}</span>
+            </div>
+            <div v-if="todo.status === 'completed'" style="font-size: 13px; color: #666; background: #f0f9eb; padding: 8px 12px; border-radius: 4px; margin-bottom: 8px;">
+              {{ todo.content }}
+            </div>
+            <el-button v-if="todo.status === 'pending'" type="primary" size="small" @click="openTodoDialog(todo)">
+              <el-icon><EditPen /></el-icon> 处理
+            </el-button>
+          </div>
+        </div>
+        <el-empty v-else description="当前部门暂无待办" :image-size="60" />
       </div>
     </div>
+
+    <!-- 待办处理弹框 -->
+    <el-dialog v-model="todoDialogVisible" title="调研计划待办填报" width="560px" :close-on-click-modal="false">
+      <div v-if="currentTodo" style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;">
+        <div style="font-size: 13px; color: #333; font-weight: 600;">{{ currentTodo.title }}</div>
+        <div style="font-size: 12px; color: #999; margin-top: 4px;">{{ currentTodo.id }} | {{ currentTodo.department }}</div>
+      </div>
+      <el-form label-width="100px" size="default">
+        <el-form-item label="填报内容" required>
+          <el-input v-model="todoForm.content" type="textarea" :rows="5" placeholder="请输入调研计划相关内容..." />
+        </el-form-item>
+        <el-form-item label="附件">
+          <el-upload action="#" :auto-upload="false" :limit="5">
+            <el-button size="small"><el-icon><Upload /></el-icon> 上传附件</el-button>
+          </el-upload>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="todoDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitTodo">提交</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 统计概览 -->
     <div v-if="viewMode === 'stats'">
@@ -208,16 +235,22 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import * as echarts from 'echarts'
-import { mockIssues, deptStats, organizations } from '../mock/data'
-import { Download, Upload } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { mockIssues, deptStats, organizations, planTodos } from '../mock/data'
+import { Download, Upload, EditPen, Clock, CircleCheck } from '@element-plus/icons-vue'
 
 const selectedOrg = ref(['province', 'it'])
 const selectedDept = ref('信息技术部')
-const viewMode = ref('detail')
+const viewMode = ref('todo')
 const showOnlyVisible = ref(false)
-const summaryPeriod = ref('q1')
 const deptChartRef = ref(null)
 const satisfactionChartRef = ref(null)
+
+// 待办相关
+const todoDialogVisible = ref(false)
+const currentTodo = ref(null)
+const todoForm = ref({ content: '' })
+const localPlanTodos = ref([...planTodos])
 
 const orgOptions = organizations.map(org => ({
   value: org.value,
@@ -237,9 +270,38 @@ function onOrgChange(val) {
 
 const allDeptStats = ref(deptStats)
 
-const periodLabels = { q1: '一季度', h1: '上半年', q3: '三季度', full: '全年' }
-
 const currentDeptStats = computed(() => deptStats.find(d => d.dept === selectedDept.value))
+
+// 当前部门的调研计划待办
+const deptPlanTodos = computed(() => {
+  if (!selectedDept.value) return localPlanTodos.value
+  return localPlanTodos.value.filter(t => t.department === selectedDept.value)
+})
+
+function openTodoDialog(todo) {
+  currentTodo.value = todo
+  todoForm.value = { content: '' }
+  todoDialogVisible.value = true
+}
+
+function submitTodo() {
+  if (!todoForm.value.content) {
+    ElMessage.warning('请输入填报内容')
+    return
+  }
+  const idx = localPlanTodos.value.findIndex(t => t.id === currentTodo.value.id)
+  if (idx !== -1) {
+    localPlanTodos.value[idx] = {
+      ...localPlanTodos.value[idx],
+      status: 'completed',
+      statusLabel: '已完成',
+      content: todoForm.value.content,
+      submitDate: new Date().toISOString().split('T')[0],
+    }
+  }
+  ElMessage.success('待办已提交')
+  todoDialogVisible.value = false
+}
 
 const deptIssues = computed(() => {
   if (!selectedDept.value) {

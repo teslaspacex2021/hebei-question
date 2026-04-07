@@ -24,6 +24,12 @@ const routes = [
     meta: { title: '新建问题' }
   },
   {
+    path: '/issues/:id',
+    name: 'IssueDetail',
+    component: () => import('../views/IssueDetail.vue'),
+    meta: { title: '问题详情' }
+  },
+  {
     path: '/leader',
     name: 'LeaderView',
     component: () => import('../views/LeaderView.vue'),

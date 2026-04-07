@@ -107,12 +107,25 @@
       </div>
     </div>
 
+    <!-- 已解决问题标记 -->
+    <div class="form-card">
+      <div class="form-section-title">问题状态</div>
+      <el-form label-width="120px" label-position="right" size="default">
+        <el-form-item label="是否已解决">
+          <el-switch v-model="form.resolved" active-text="已解决（不走流程）" inactive-text="未解决（进入流程）" />
+        </el-form-item>
+        <el-form-item v-if="form.resolved" label="解决说明">
+          <el-input v-model="form.resolvedRemark" type="textarea" :rows="3" placeholder="请简要说明问题解决情况..." />
+        </el-form-item>
+      </el-form>
+    </div>
+
     <!-- 提交按钮 -->
     <div style="display: flex; justify-content: center; gap: 12px; margin-top: 16px;">
       <el-button size="large" @click="$router.back()">取消</el-button>
       <el-button size="large">保存草稿</el-button>
       <el-button type="primary" size="large" @click="handleSubmit">
-        <el-icon><Check /></el-icon> 提交
+        <el-icon><Check /></el-icon> {{ form.resolved ? '提交（已解决，不走流程）' : '提交' }}
       </el-button>
     </div>
   </div>
@@ -130,6 +143,8 @@ const form = reactive({
   endDate: '',
   location: [],
   leader: '',
+  resolved: false,
+  resolvedRemark: '',
   issues: [
     { category: '', content: '', mainDept: '', otherDepts: [], expectedDate: '' },
   ],
@@ -172,6 +187,10 @@ function downloadTemplate() {
 }
 
 function handleSubmit() {
-  ElMessage.success('问题已提交，进入审批流程')
+  if (form.resolved) {
+    ElMessage.success('已解决问题已录入，无需流程审批')
+  } else {
+    ElMessage.success('问题已提交，进入审批流程')
+  }
 }
 </script>
