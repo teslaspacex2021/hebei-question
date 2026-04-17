@@ -1,23 +1,5 @@
 <template>
   <div>
-    <!-- Tab 过滤 -->
-    <div class="filter-tabs">
-      <div
-        v-for="tab in tabs"
-        :key="tab.value"
-        :class="['tab-item', { active: activeTab === tab.value }]"
-        @click="activeTab = tab.value"
-      >
-        {{ tab.label }}
-      </div>
-      <div style="flex: 1;"></div>
-      <div class="update-rate" style="padding: 6px 14px;">
-        <span>及时更新率：</span>
-        <span class="rate-value" style="color: #1890FF;">88.4%</span>
-        <span class="rate-change down">▼ -11.6%</span>
-      </div>
-    </div>
-
     <!-- 统计卡片（与工作台一致，按问题状态） -->
     <div class="stats-row">
       <div class="stat-card" style="cursor: pointer;" @click="activeTab = 'all'">
@@ -279,14 +261,6 @@ const progressForm = ref({
   updateType: 'proactive',
   delayedDeadline: null,
 })
-
-const tabs = [
-  { value: 'all', label: '全部问题' },
-  { value: 'pending', label: '待处理' },
-  { value: 'in_progress', label: '解决中' },
-  { value: 'completed', label: '已完成' },
-  { value: 'supervised', label: '已督办' },
-]
 
 const responsibleList = computed(() => [...new Set(localIssues.value.map(i => i.responsible))])
 

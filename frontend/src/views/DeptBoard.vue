@@ -22,42 +22,12 @@
       </el-radio-group>
     </div>
 
-    <!-- 部门统计卡片 -->
-    <div class="stats-row" v-if="currentDeptStats">
-      <div class="stat-card">
+    <!-- 部门统计卡片（根据当前tab动态计算） -->
+    <div class="stats-row" v-if="statsItems.length">
+      <div class="stat-card" v-for="stat in statsItems" :key="stat.label">
         <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #1890FF;">{{ currentDeptStats.total }}</div>
-          <div class="stat-label">问题总数</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #D48806;">{{ currentDeptStats.pending }}</div>
-          <div class="stat-label">待处理</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #1890FF;">{{ currentDeptStats.inProgress }}</div>
-          <div class="stat-label">解决中</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #52C41A;">{{ currentDeptStats.completed }}</div>
-          <div class="stat-label">已完成</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #F5222D;">{{ currentDeptStats.overdue }}</div>
-          <div class="stat-label">已超期</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-info" style="text-align: center; width: 100%;">
-          <div class="stat-value" style="color: #D48806;">{{ currentDeptStats.satisfaction || '—' }}</div>
-          <div class="stat-label">满意度</div>
+          <div class="stat-value" :style="{ color: stat.color }">{{ stat.value }}</div>
+          <div class="stat-label">{{ stat.label }}</div>
         </div>
       </div>
     </div>
@@ -314,7 +284,45 @@ function onOrgChange(val) {
 
 const allDeptStats = ref(deptStats)
 
-const currentDeptStats = computed(() => deptStats.find(d => d.dept === selectedDept.value))
+const statsItems = computed(() => {
+  if (viewMode.value === 'todo') {
+    const todos = deptPlanTodos.value
+    const total = todos.length
+    const pending = todos.filter(t => t.status === 'pending').length
+    const completed = todos.filter(t => t.status === 'completed').length
+    return [
+      { label: '待办总数', value: total, color: '#1890FF' },
+      { label: '待处理', value: pending, color: '#D48806' },
+      { label: '已完成', value: completed, color: '#52C41A' },
+    ]
+  } else if (viewMode.value === 'organize') {
+    const orgs = deptOrganizes.value
+    const totalOrgs = orgs.length
+    const totalIssues = orgs.reduce((sum, o) => sum + o.issues.length, 0)
+    const pendingOrgs = orgs.filter(o => o.status === 'pending').length
+    const approvedOrgs = orgs.filter(o => o.status === 'approved').length
+    return [
+      { label: '整理单数', value: totalOrgs, color: '#1890FF' },
+      { label: '问题总数', value: totalIssues, color: '#722ED1' },
+      { label: '待审批', value: pendingOrgs, color: '#D48806' },
+      { label: '已通过', value: approvedOrgs, color: '#52C41A' },
+    ]
+  } else {
+    const issues = deptIssues.value
+    const rated = issues.filter(i => i.satisfaction > 0)
+    const avgSat = rated.length > 0
+      ? (rated.reduce((s, i) => s + i.satisfaction, 0) / rated.length).toFixed(1)
+      : '—'
+    return [
+      { label: '问题总数', value: issues.length, color: '#1890FF' },
+      { label: '待处理', value: issues.filter(i => i.status === 'pending').length, color: '#D48806' },
+      { label: '解决中', value: issues.filter(i => i.status === 'in_progress').length, color: '#1890FF' },
+      { label: '已完成', value: issues.filter(i => i.status === 'completed').length, color: '#52C41A' },
+      { label: '已超期', value: issues.filter(i => i.status === 'overdue').length, color: '#F5222D' },
+      { label: '满意度', value: avgSat, color: '#D48806' },
+    ]
+  }
+})
 
 // 当前部门的调研计划待办
 const deptPlanTodos = computed(() => {
@@ -358,12 +366,6 @@ const deptIssues = computed(() => {
   }
   return mockIssues.filter(i => i.department === selectedDept.value)
     .map(i => ({ ...i, provinceVisible: i.status === 'completed' }))
-})
-
-const completionRate = computed(() => {
-  const s = currentDeptStats.value
-  if (!s || !s.total) return 0
-  return Math.round(s.completed / s.total * 100)
 })
 
 // 图表初始化
