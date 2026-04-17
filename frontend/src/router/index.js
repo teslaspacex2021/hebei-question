@@ -42,10 +42,16 @@ const routes = [
     meta: { title: '部门看板' }
   },
   {
-    path: '/plan',
-    name: 'PlanReport',
-    component: () => import('../views/PlanReport.vue'),
-    meta: { title: '调研计划' }
+    path: '/dept-board/issue-organize/create',
+    name: 'IssueOrganizeCreate',
+    component: () => import('../views/IssueOrganizeCreate.vue'),
+    meta: { title: '新增问题整理' }
+  },
+  {
+    path: '/dept-board/issue-organize/:id',
+    name: 'IssueOrganizeDetail',
+    component: () => import('../views/IssueOrganizeDetail.vue'),
+    meta: { title: '问题整理详情' }
   },
 ]
 

@@ -42,7 +42,7 @@
       </el-form>
     </div>
 
-    <!-- 问题条目 -->
+    <!-- 问题填报（表格样式） -->
     <div class="form-card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <div class="form-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">问题填报</div>
@@ -61,63 +61,69 @@
         </div>
       </div>
 
-      <div v-for="(item, index) in form.issues" :key="index"
-        style="background: #fafafa; border-radius: 6px; padding: 16px; margin-bottom: 12px; border: 1px solid #e8e8e8; position: relative;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <span style="font-weight: 600; color: #409EFF;">问题 {{ index + 1 }}</span>
-          <el-button v-if="form.issues.length > 1" type="danger" link size="small" @click="removeIssueItem(index)">
-            <el-icon><Delete /></el-icon> 删除
-          </el-button>
-        </div>
-        <el-form label-width="110px" label-position="right" size="default">
-          <el-row :gutter="12">
-            <el-col :span="8">
-              <el-form-item label="问题分类" required>
-                <el-select v-model="item.category" placeholder="选择分类" style="width: 100%;">
-                  <el-option v-for="c in categories" :key="c.value" :label="c.label" :value="c.value" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="主要答复部门" required>
-                <el-select v-model="item.mainDept" placeholder="选择部门" style="width: 100%;">
-                  <el-option v-for="d in departments" :key="d.value" :label="d.label" :value="d.value" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="期望答复时间" required>
-                <el-date-picker v-model="item.expectedDate" type="date" placeholder="选择日期" style="width: 100%;" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-form-item label="问题内容" required>
-            <el-input v-model="item.content" type="textarea" :rows="2" placeholder="请输入问题内容" />
-          </el-form-item>
-          <el-row :gutter="12">
-            <el-col :span="12">
-              <el-form-item label="其他配合部门">
-                <el-select v-model="item.otherDepts" multiple placeholder="选择部门" style="width: 100%;">
-                  <el-option v-for="d in departments" :key="d.value" :label="d.label" :value="d.value" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </el-form>
-      </div>
-    </div>
-
-    <!-- 已解决问题标记 -->
-    <div class="form-card">
-      <div class="form-section-title">问题状态</div>
-      <el-form label-width="120px" label-position="right" size="default">
-        <el-form-item label="是否已解决">
-          <el-switch v-model="form.resolved" active-text="已解决（不走流程）" inactive-text="未解决（进入流程）" />
-        </el-form-item>
-        <el-form-item v-if="form.resolved" label="解决说明">
-          <el-input v-model="form.resolvedRemark" type="textarea" :rows="3" placeholder="请简要说明问题解决情况..." />
-        </el-form-item>
-      </el-form>
+      <el-table
+        :data="form.issues"
+        border
+        size="default"
+        :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '10px 0' }"
+        row-key="__key"
+      >
+        <el-table-column label="问题状态" width="170" align="center">
+          <template #default="{ row }">
+            <el-select v-model="row.resolved" placeholder="选择状态" style="width: 140px;" @change="onResolvedChange(row)">
+              <el-option :value="false" label="未解决（进入流程）" />
+              <el-option :value="true" label="已解决（不走流程）" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="问题分类" width="140">
+          <template #default="{ row }">
+            <el-select v-model="row.category" placeholder="选择分类" style="width: 120px;" :disabled="row.resolved">
+              <el-option v-for="c in categories" :key="c.value" :label="c.label" :value="c.value" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="问题内容" min-width="220">
+          <template #default="{ row }">
+            <el-input v-model="row.content" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }" :placeholder="row.resolved ? '请简要描述问题' : '请输入问题内容'" />
+          </template>
+        </el-table-column>
+        <el-table-column label="主要答复部门" width="140">
+          <template #default="{ row }">
+            <el-select v-if="!row.resolved" v-model="row.mainDept" placeholder="选择部门" style="width: 120px;">
+              <el-option v-for="d in departments" :key="d.value" :label="d.label" :value="d.value" />
+            </el-select>
+            <span v-else style="color: #999; font-size: 12px;">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="配合部门" width="160">
+          <template #default="{ row }">
+            <el-select v-if="!row.resolved" v-model="row.otherDepts" multiple collapse-tags placeholder="选择" style="width: 140px;">
+              <el-option v-for="d in departments" :key="d.value" :label="d.label" :value="d.value" />
+            </el-select>
+            <span v-else style="color: #999; font-size: 12px;">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="期望答复时间" width="160">
+          <template #default="{ row }">
+            <el-date-picker v-if="!row.resolved" v-model="row.expectedDate" type="date" placeholder="选择日期" style="width: 140px;" />
+            <span v-else style="color: #999; font-size: 12px;">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="解决说明" min-width="180">
+          <template #default="{ row }">
+            <el-input v-if="row.resolved" v-model="row.resolvedRemark" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }" placeholder="请输入解决说明" />
+            <span v-else style="color: #999; font-size: 12px;">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="60" align="center" fixed="right">
+          <template #default="{ $index }">
+            <el-button v-if="form.issues.length > 1" type="danger" link size="small" @click="removeIssueItem($index)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
 
     <!-- 提交按钮 -->
@@ -125,7 +131,7 @@
       <el-button size="large" @click="$router.back()">取消</el-button>
       <el-button size="large">保存草稿</el-button>
       <el-button type="primary" size="large" @click="handleSubmit">
-        <el-icon><Check /></el-icon> {{ form.resolved ? '提交（已解决，不走流程）' : '提交' }}
+        <el-icon><Check /></el-icon> 提交
       </el-button>
     </div>
   </div>
@@ -138,15 +144,15 @@ import { Download, Upload, Plus, Delete, Check } from '@element-plus/icons-vue'
 import { issueCategories, departments } from '../mock/data'
 
 const categories = issueCategories
+let keyCounter = 1
+
 const form = reactive({
   startDate: '',
   endDate: '',
   location: [],
   leader: '',
-  resolved: false,
-  resolvedRemark: '',
   issues: [
-    { category: '', content: '', mainDept: '', otherDepts: [], expectedDate: '' },
+    { __key: keyCounter++, resolved: false, category: '', content: '', mainDept: '', otherDepts: [], expectedDate: '', resolvedRemark: '' },
   ],
 })
 
@@ -174,8 +180,19 @@ const locationOptions = [
   }
 ]
 
+function onResolvedChange(row) {
+  if (row.resolved) {
+    row.category = ''
+    row.mainDept = ''
+    row.otherDepts = []
+    row.expectedDate = ''
+  } else {
+    row.resolvedRemark = ''
+  }
+}
+
 function addIssueItem() {
-  form.issues.push({ category: '', content: '', mainDept: '', otherDepts: [], expectedDate: '' })
+  form.issues.push({ __key: keyCounter++, resolved: false, category: '', content: '', mainDept: '', otherDepts: [], expectedDate: '', resolvedRemark: '' })
 }
 
 function removeIssueItem(index) {
@@ -187,10 +204,31 @@ function downloadTemplate() {
 }
 
 function handleSubmit() {
-  if (form.resolved) {
+  const resolvedIssues = form.issues.filter(i => i.resolved)
+  const unresolvedIssues = form.issues.filter(i => !i.resolved)
+
+  for (const item of resolvedIssues) {
+    if (!item.content) {
+      ElMessage.warning('已解决的问题请填写问题内容')
+      return
+    }
+    if (!item.resolvedRemark) {
+      ElMessage.warning('已解决的问题请填写解决说明')
+      return
+    }
+  }
+
+  for (const item of unresolvedIssues) {
+    if (!item.category || !item.content || !item.mainDept || !item.expectedDate) {
+      ElMessage.warning('未解决的问题请填写完整信息（分类、内容、主要答复部门、期望答复时间）')
+      return
+    }
+  }
+
+  if (resolvedIssues.length > 0 && unresolvedIssues.length === 0) {
     ElMessage.success('已解决问题已录入，无需流程审批')
-  } else {
-    ElMessage.success('问题已提交，进入审批流程')
+  } else if (unresolvedIssues.length > 0) {
+    ElMessage.success(`问题已提交：${unresolvedIssues.length}条进入审批流程${resolvedIssues.length > 0 ? `，${resolvedIssues.length}条已解决直接录入` : ''}`)
   }
 }
 </script>

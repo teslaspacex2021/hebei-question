@@ -126,9 +126,29 @@ export const mockIssues = [
     pinned: true,
     resolved: false,
     subIssues: [
-      { id: 'DY2026020001-1', title: '裕华区5G信号盲区排查', handler: '王志成', status: 'in_progress', statusLabel: '解决中', progress: 80, deadline: '2026-03-01' },
-      { id: 'DY2026020001-2', title: '长安区基站扩容方案', handler: '段磊', status: 'in_progress', statusLabel: '解决中', progress: 60, deadline: '2026-03-10' },
-      { id: 'DY2026020001-3', title: '新华区网络质量优化', handler: '王志成', status: 'pending', statusLabel: '待处理', progress: 20, deadline: '2026-03-15' },
+      {
+        id: 'DY2026020001-1', title: '裕华区5G信号盲区排查', handler: '王志成', status: 'in_progress', statusLabel: '解决中', progress: 80, deadline: '2026-03-01',
+        mainDept: '网络运维部', assistDepts: ['信息技术部'],
+        collaborators: [
+          { id: 'c1', name: '王志成', dept: '网络运维部', role: 'main', hasUpdated: true, updateContent: '已完成裕华区80%基站排查', updateDate: '2026-02-08' },
+          { id: 'c2', name: '李鹏', dept: '信息技术部', role: 'assist', hasUpdated: true, updateContent: '已配合完成系统侧数据核查', updateDate: '2026-02-07' },
+        ],
+      },
+      {
+        id: 'DY2026020001-2', title: '长安区基站扩容方案', handler: '段磊', status: 'in_progress', statusLabel: '解决中', progress: 60, deadline: '2026-03-10',
+        mainDept: '网络运维部', assistDepts: ['市场经营部'],
+        collaborators: [
+          { id: 'c3', name: '段磊', dept: '网络运维部', role: 'main', hasUpdated: true, updateContent: '扩容方案初稿已完成', updateDate: '2026-02-06' },
+          { id: 'c4', name: '赵刚', dept: '市场经营部', role: 'assist', hasUpdated: false, updateContent: '', updateDate: '' },
+        ],
+      },
+      {
+        id: 'DY2026020001-3', title: '新华区网络质量优化', handler: '王志成', status: 'pending', statusLabel: '待处理', progress: 20, deadline: '2026-03-15',
+        mainDept: '网络运维部', assistDepts: [],
+        collaborators: [
+          { id: 'c5', name: '王志成', dept: '网络运维部', role: 'main', hasUpdated: false, updateContent: '', updateDate: '' },
+        ],
+      },
     ],
   },
   {
@@ -157,8 +177,21 @@ export const mockIssues = [
     pinned: false,
     resolved: false,
     subIssues: [
-      { id: 'DY2026020002-1', title: '投诉处理SOP修订', handler: '何天坤', status: 'completed', statusLabel: '已完成', progress: 100, deadline: '2026-02-15' },
-      { id: 'DY2026020002-2', title: '投诉处理系统改造', handler: '何天坤', status: 'in_progress', statusLabel: '解决中', progress: 70, deadline: '2026-02-25' },
+      {
+        id: 'DY2026020002-1', title: '投诉处理SOP修订', handler: '何天坤', status: 'completed', statusLabel: '已完成', progress: 100, deadline: '2026-02-15',
+        mainDept: '客户服务部', assistDepts: [],
+        collaborators: [
+          { id: 'c6', name: '何天坤', dept: '客户服务部', role: 'main', hasUpdated: true, updateContent: 'SOP修订完成并已发布', updateDate: '2026-02-14' },
+        ],
+      },
+      {
+        id: 'DY2026020002-2', title: '投诉处理系统改造', handler: '何天坤', status: 'in_progress', statusLabel: '解决中', progress: 70, deadline: '2026-02-25',
+        mainDept: '客户服务部', assistDepts: ['信息技术部'],
+        collaborators: [
+          { id: 'c7', name: '何天坤', dept: '客户服务部', role: 'main', hasUpdated: true, updateContent: '系统改造进行中，预计下周完成', updateDate: '2026-02-08' },
+          { id: 'c8', name: '段磊', dept: '信息技术部', role: 'assist', hasUpdated: false, updateContent: '', updateDate: '' },
+        ],
+      },
     ],
   },
   {
@@ -771,6 +804,52 @@ export const stageSummaries = [
     author: '周波',
     createDate: '2026-01-15',
     content: '张总2025年度共调研12个地市，收集问题86个，其中战略规划类22个、经营业务类35个、技术类18个、其他11个。',
+  },
+]
+
+// ===== 问题整理数据 =====
+export const issueOrganizes = [
+  {
+    id: 'ZL2026040001',
+    reporter: '段磊',
+    department: '信息技术部',
+    createDate: '2026-04-10',
+    status: 'approved',
+    statusLabel: '已通过',
+    approver: '张主任',
+    approveDate: '2026-04-11',
+    issues: [
+      { seq: 1, title: '系统登录异常', description: '部分用户反馈登录时出现500错误', result: '已排查为数据库连接池配置问题，已修复' },
+      { seq: 2, title: '报表导出超时', description: '大数据量报表导出时超过30秒超时', result: '优化查询SQL，增加异步导出功能' },
+      { seq: 3, title: '移动端页面适配', description: '手机端部分页面显示不完整', result: '待处理' },
+    ],
+  },
+  {
+    id: 'ZL2026040002',
+    reporter: '王志成',
+    department: '信息技术部',
+    createDate: '2026-04-12',
+    status: 'pending',
+    statusLabel: '待审批',
+    approver: '',
+    approveDate: '',
+    issues: [
+      { seq: 1, title: '网络设备巡检异常', description: '3台核心交换机固件版本过低，存在安全隐患', result: '计划本月安排升级' },
+      { seq: 2, title: '机房温控告警', description: 'B区机房温度偶发超标', result: '空调系统需要检修' },
+    ],
+  },
+  {
+    id: 'ZL2026040003',
+    reporter: '赵刚',
+    department: '市场经营部',
+    createDate: '2026-04-08',
+    status: 'approved',
+    statusLabel: '已通过',
+    approver: '李主任',
+    approveDate: '2026-04-09',
+    issues: [
+      { seq: 1, title: '渠道激励方案落地', description: '新激励方案执行情况反馈', result: '各区县已开始执行，效果待评估' },
+    ],
   },
 ]
 

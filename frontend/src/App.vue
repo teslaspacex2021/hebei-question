@@ -28,10 +28,6 @@
           <el-icon><OfficeBuilding /></el-icon>
           <span>部门看板</span>
         </el-menu-item>
-        <el-menu-item index="/plan">
-          <el-icon><Calendar /></el-icon>
-          <span>调研计划</span>
-        </el-menu-item>
       </el-menu>
     </aside>
 

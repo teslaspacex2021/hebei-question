@@ -16,6 +16,7 @@
       <div style="flex: 1;"></div>
       <el-radio-group v-model="viewMode" size="default">
         <el-radio-button value="todo">调研计划待办</el-radio-button>
+        <el-radio-button value="organize">问题整理</el-radio-button>
         <el-radio-button value="detail">明细视图</el-radio-button>
         <el-radio-button value="stats">统计概览</el-radio-button>
       </el-radio-group>
@@ -179,6 +180,48 @@
       </template>
     </el-dialog>
 
+    <!-- 问题整理 -->
+    <div v-if="viewMode === 'organize'">
+      <div class="table-card" style="padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <span style="font-size: 14px; font-weight: 600; color: #333;">问题整理</span>
+          <el-button type="primary" size="small" @click="$router.push('/dept-board/issue-organize/create')">
+            <el-icon><Plus /></el-icon> 新增问题整理
+          </el-button>
+        </div>
+        <div v-if="deptOrganizes.length > 0">
+          <div v-for="item in deptOrganizes" :key="item.id"
+            style="background: #fafafa; border-radius: 8px; padding: 16px; margin-bottom: 12px; border: 1px solid #e8e8e8; cursor: pointer;"
+            @click="$router.push('/dept-board/issue-organize/' + item.id)">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <el-icon :size="18" style="color: #409EFF;"><Memo /></el-icon>
+                <span style="font-size: 14px; font-weight: 600; color: #333;">问题整理 - {{ item.id }}</span>
+              </div>
+              <el-tag :type="item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'danger' : 'warning'" size="small">{{ item.statusLabel }}</el-tag>
+            </div>
+            <div style="font-size: 12px; color: #999; margin-bottom: 8px;">
+              填报人：{{ item.reporter }} | 部门：{{ item.department }} | 创建日期：{{ item.createDate }} | 问题数：{{ item.issues.length }}
+              <span v-if="item.approveDate"> | 审批日期：{{ item.approveDate }}</span>
+            </div>
+            <el-table
+              :data="item.issues"
+              class="compact-table"
+              size="small"
+              :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '6px 0' }"
+              style="margin-top: 8px;"
+            >
+              <el-table-column prop="seq" label="序号" width="60" align="center" />
+              <el-table-column prop="title" label="标题" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="description" label="问题描述" min-width="200" show-overflow-tooltip />
+              <el-table-column prop="result" label="处理结果" min-width="180" show-overflow-tooltip />
+            </el-table>
+          </div>
+        </div>
+        <el-empty v-else description="暂无问题整理记录" :image-size="60" />
+      </div>
+    </div>
+
     <!-- 统计概览 -->
     <div v-if="viewMode === 'stats'">
       <el-row :gutter="12">
@@ -236,8 +279,9 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { mockIssues, deptStats, organizations, planTodos } from '../mock/data'
-import { Download, Upload, EditPen, Clock, CircleCheck } from '@element-plus/icons-vue'
+import { mockIssues, deptStats, organizations, planTodos, issueOrganizes } from '../mock/data'
+import { Download, Upload, EditPen, Clock, CircleCheck, Plus, Memo } from '@element-plus/icons-vue'
+import { Warning } from '@element-plus/icons-vue'
 
 const selectedOrg = ref(['province', 'it'])
 const selectedDept = ref('信息技术部')
@@ -276,6 +320,11 @@ const currentDeptStats = computed(() => deptStats.find(d => d.dept === selectedD
 const deptPlanTodos = computed(() => {
   if (!selectedDept.value) return localPlanTodos.value
   return localPlanTodos.value.filter(t => t.department === selectedDept.value)
+})
+
+const deptOrganizes = computed(() => {
+  if (!selectedDept.value) return issueOrganizes
+  return issueOrganizes.filter(o => o.department === selectedDept.value)
 })
 
 function openTodoDialog(todo) {
