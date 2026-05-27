@@ -8,28 +8,28 @@
       <span style="font-size: 15px; font-weight: 600; color: #333; margin-left: 8px;">{{ issue.title }}</span>
       <el-tag v-if="issue.pinned" type="danger" size="small" style="margin-left: 8px;">置顶</el-tag>
       <div style="flex: 1;"></div>
-      <el-button type="primary" size="default" @click="openProgressDialog">
+      <el-button size="default" @click="flowRecordDialogVisible = true">
+        <el-icon><List /></el-icon> 流转记录
+      </el-button>
+      <el-button size="default" @click="flowChartDialogVisible = true">
+        <el-icon><Share /></el-icon> 流程图
+      </el-button>
+      <el-button
+        v-if="canShowCorrectionFeedback"
+        type="warning"
+        size="default"
+        @click="openCorrectionDialog"
+      >
+        纠错反馈
+      </el-button>
+      <el-button
+        v-if="flowSubmitConfig.showProgressUpdate && issue.status !== 'completed'"
+        type="primary"
+        size="default"
+        @click="openProgressDialog"
+      >
         <el-icon><EditPen /></el-icon> 更新进展
       </el-button>
-    </div>
-
-    <!-- 流程进度 -->
-    <div class="form-card">
-      <div class="form-section-title">流程进度</div>
-      <div class="flow-chart-container">
-        <div v-for="(node, idx) in allFlowNodes" :key="node.value" class="flow-node-wrapper">
-          <div :class="['flow-node-circle', getNodeStatus(node.value, issue.flowNode)]">
-            <span class="flow-node-idx">{{ idx + 1 }}</span>
-          </div>
-          <div class="flow-node-label" :class="{ active: node.value === issue.flowNode }">{{ node.label }}</div>
-          <div v-if="idx < allFlowNodes.length - 1" :class="['flow-node-line', { done: isNodeDone(node.value, issue.flowNode) }]"></div>
-        </div>
-      </div>
-      <!-- 提交下一步约束提示 -->
-      <div v-if="hasSubIssues && !allCollaboratorsUpdated" style="margin-top: 12px; background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; gap: 8px;">
-        <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
-        <span style="font-size: 13px; color: #D48806;">提示：所有子问题的协同处理人均需更新进展后，才可继续提交下一步处理。当前还有 {{ pendingCollaboratorsCount }} 位处理人未更新进展。</span>
-      </div>
     </div>
 
     <!-- 基本信息 -->
@@ -77,140 +77,260 @@
       </div>
     </div>
 
-    <!-- 子问题处理情况（增强版：含协同处理人） -->
-    <div class="form-card" v-if="hasSubIssues">
-      <div class="form-section-title">子问题处理情况</div>
-      <div v-for="(sub, subIdx) in issue.subIssues" :key="sub.id"
-        style="background: #fafafa; border-radius: 8px; padding: 16px; margin-bottom: 16px; border: 1px solid #e8e8e8;">
-        <!-- 子问题头部 -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-weight: 600; color: #409EFF; font-size: 14px;">{{ sub.id }}</span>
-            <span style="font-weight: 600; color: #333;">{{ sub.title }}</span>
-            <span :class="'status-tag status-' + sub.status">{{ sub.statusLabel }}</span>
-          </div>
-          <el-progress :percentage="sub.progress" :stroke-width="6" style="width: 120px;" />
+    <!-- 问题清单（即子问题；二级办理时可维护协同与进展） -->
+    <div class="form-card issue-list-merged" v-if="mergedIssueRows.length > 0">
+      <div class="issue-list-header">
+        <div class="issue-list-header-text">
+          <div class="form-section-title" style="margin-bottom: 6px;">问题清单</div>
+          <p class="issue-list-desc">
+            <template v-if="isLevel2Process">
+              当前为 <strong>二级办理</strong>：请展开各行维护「协同处理人」并更新进展；全部更新后方可提交至部门主任。
+            </template>
+            <template v-else>
+              与「子问题」为同一清单。协同处理、进展分工仅在 <strong>二级办理</strong> 环节办理，当前环节为只读查看。
+            </template>
+          </p>
         </div>
-
-        <el-row :gutter="16" style="margin-bottom: 12px;">
-          <el-col :span="6">
-            <span style="font-size: 12px; color: #999;">处理人：</span>
-            <span style="font-size: 13px; color: #333;">{{ sub.handler }}</span>
-          </el-col>
-          <el-col :span="6">
-            <span style="font-size: 12px; color: #999;">截止日期：</span>
-            <span style="font-size: 13px; color: #333;">{{ sub.deadline }}</span>
-          </el-col>
-          <el-col :span="6">
-            <span style="font-size: 12px; color: #999;">主办部门：</span>
-            <span style="font-size: 13px; color: #333;">{{ sub.mainDept || '—' }}</span>
-          </el-col>
-          <el-col :span="6">
-            <span style="font-size: 12px; color: #999;">配合部门：</span>
-            <span style="font-size: 13px; color: #333;">{{ sub.assistDepts?.length > 0 ? sub.assistDepts.join('、') : '—' }}</span>
-          </el-col>
-        </el-row>
-
-        <!-- 协同处理人列表 -->
-        <div style="margin-top: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-size: 13px; font-weight: 600; color: #666;">协同处理人</span>
-            <el-button type="primary" link size="small" @click="openAddCollaboratorDialog(subIdx)">
-              <el-icon><Plus /></el-icon> 添加协同处理人
-            </el-button>
-          </div>
-          <el-table
-            v-if="sub.collaborators && sub.collaborators.length > 0"
-            :data="sub.collaborators"
-            size="small"
-            :header-cell-style="{ background: '#f0f2f5', color: '#333', fontWeight: 600, padding: '6px 0' }"
-          >
-            <el-table-column prop="name" label="姓名" width="90" />
-            <el-table-column prop="dept" label="部门" width="110" />
-            <el-table-column label="角色" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.role === 'main' ? 'primary' : 'info'" size="small">
-                  {{ row.role === 'main' ? '主办' : '协办' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="进展更新" min-width="200">
-              <template #default="{ row }">
-                <div v-if="row.hasUpdated">
-                  <span style="font-size: 12px; color: #333;">{{ row.updateContent }}</span>
-                  <div style="font-size: 11px; color: #999; margin-top: 2px;">{{ row.updateDate }}</div>
-                </div>
-                <span v-else style="color: #E6A23C; font-size: 12px;">
-                  <el-icon><WarningFilled /></el-icon> 待更新进展
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="90" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.hasUpdated ? 'success' : 'warning'" size="small">
-                  {{ row.hasUpdated ? '已更新' : '待更新' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="90" align="center">
-              <template #default="{ row }">
-                <el-button v-if="!row.hasUpdated" type="primary" link size="small" @click="openCollaboratorUpdateDialog(subIdx, row)">
-                  更新
-                </el-button>
-                <span v-else style="color: #67C23A; font-size: 12px;">
-                  <el-icon><CircleCheck /></el-icon>
-                </span>
-              </template>
-            </el-table-column>
-          </el-table>
-          <div v-else style="text-align: center; padding: 12px; color: #999; font-size: 12px;">暂无协同处理人</div>
-
-          <!-- 全部更新完成提示 -->
-          <div v-if="isSubIssueAllUpdated(sub)" style="margin-top: 8px; background: #F6FFED; border: 1px solid #B7EB8F; border-radius: 4px; padding: 6px 12px; display: flex; align-items: center; gap: 6px;">
-            <el-icon style="color: #52C41A;"><CircleCheck /></el-icon>
-            <span style="font-size: 12px; color: #52C41A;">所有协同处理人已完成进展更新</span>
-          </div>
-          <div v-else-if="sub.collaborators && sub.collaborators.length > 0" style="margin-top: 8px; background: #FFFBE6; border: 1px solid #FFE58F; border-radius: 4px; padding: 6px 12px; display: flex; align-items: center; gap: 6px;">
-            <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
-            <span style="font-size: 12px; color: #D48806;">
-              还有 {{ sub.collaborators.filter(c => !c.hasUpdated).length }} 位处理人未更新进展，无法提交下一步
-            </span>
-          </div>
-        </div>
+        <el-tag :type="isLevel2Process ? 'warning' : 'info'" effect="plain" size="small">
+          {{ isLevel2Process ? '可办理协同' : '仅查看' }}
+        </el-tag>
       </div>
+
+      <el-table
+        :data="mergedIssueRows"
+        border
+        size="small"
+        row-key="subId"
+        class="issue-list-table"
+        :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '8px 0' }"
+      >
+        <el-table-column v-if="isLevel2Process && hasSubIssues" type="expand" width="44">
+          <template #default="{ row }">
+            <div v-if="row.subIdx >= 0" class="expand-inner">
+              <div class="expand-toolbar">
+                <span class="expand-title">协同处理人</span>
+                <el-button type="primary" link size="small" @click="openAddCollaboratorDialog(row.subIdx)">
+                  <el-icon><Plus /></el-icon> 添加协同处理人
+                </el-button>
+              </div>
+              <el-table
+                v-if="issue.subIssues[row.subIdx].collaborators?.length > 0"
+                :data="issue.subIssues[row.subIdx].collaborators"
+                size="small"
+                class="collab-nested-table"
+                :header-cell-style="{ background: '#eef1f6', color: '#333', fontWeight: 600, padding: '6px 0' }"
+              >
+                <el-table-column prop="name" label="姓名" width="88" />
+                <el-table-column prop="dept" label="部门" width="108" />
+                <el-table-column label="角色" width="72">
+                  <template #default="{ row: c }">
+                    <el-tag :type="c.role === 'main' ? 'primary' : 'info'" size="small">
+                      {{ c.role === 'main' ? '主办' : '协办' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="进展更新" min-width="180">
+                  <template #default="{ row: c }">
+                    <div v-if="c.hasUpdated">
+                      <span class="collab-update-text">{{ c.updateContent }}</span>
+                      <div class="collab-update-date">{{ c.updateDate }}</div>
+                    </div>
+                    <span v-else class="collab-pending"><el-icon><WarningFilled /></el-icon> 待更新进展</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="80" align="center">
+                  <template #default="{ row: c }">
+                    <el-tag :type="c.hasUpdated ? 'success' : 'warning'" size="small">
+                      {{ c.hasUpdated ? '已更新' : '待更新' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="72" align="center">
+                  <template #default="{ row: c }">
+                    <el-button v-if="!c.hasUpdated" type="primary" link size="small" @click="openCollaboratorUpdateDialog(row.subIdx, c)">
+                      更新
+                    </el-button>
+                    <span v-else class="collab-done"><el-icon><CircleCheck /></el-icon></span>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-else class="collab-empty">暂无协同处理人</div>
+
+              <div v-if="isSubIssueAllUpdated(issue.subIssues[row.subIdx])" class="collab-alert collab-alert--ok">
+                <el-icon><CircleCheck /></el-icon>
+                <span>该子问题协同处理人已全部更新进展</span>
+              </div>
+              <div v-else-if="issue.subIssues[row.subIdx].collaborators?.length" class="collab-alert collab-alert--warn">
+                <el-icon><WarningFilled /></el-icon>
+                <span>尚有 {{ issue.subIssues[row.subIdx].collaborators.filter(c => !c.hasUpdated).length }} 人未更新进展，无法提交至下一步</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="seq" label="序号" width="52" align="center" />
+        <el-table-column prop="subId" label="子问题编号" min-width="118" show-overflow-tooltip />
+        <el-table-column prop="title" label="问题内容" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="categoryLabel" label="问题分类" width="108" show-overflow-tooltip />
+        <el-table-column prop="mainDept" label="主办部门" width="108" show-overflow-tooltip />
+        <el-table-column prop="assistDeptsLabel" label="配合部门" width="112" show-overflow-tooltip />
+        <el-table-column prop="handler" label="处理人" width="88" show-overflow-tooltip />
+        <el-table-column prop="deadline" label="截止日期" width="102" align="center" />
+        <el-table-column label="状态" width="80" align="center">
+          <template #default="{ row }">
+            <span :class="'status-tag status-' + row.status">{{ row.statusLabel }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="进度" width="130" align="center">
+          <template #default="{ row }">
+            <el-progress :percentage="row.progress" :stroke-width="6" :show-text="true" style="width: 110px;" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="100" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="openSubProgressDialog(row)">更新记录</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </div>
 
-    <!-- 进展更新记录 -->
-    <div class="form-card">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <div class="form-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">进展更新记录</div>
-        <el-button type="primary" size="small" @click="openProgressDialog">
-          <el-icon><EditPen /></el-icon> 更新进展
+    <!-- 底部：路由与提交办理（未办结） -->
+    <div class="form-card" v-if="issue.status !== 'completed' && flowSubmitConfig.routes.length > 0">
+      <div class="form-section-title">提交办理</div>
+      <p style="font-size: 12px; color: #999; margin: 0 0 12px;">
+        当前环节：<strong style="color: #333;">{{ issue.flowNodeLabel }}</strong>
+        <template v-if="flowSubmitConfig.routes.length > 1">，请先选择办理路由，再点击「提交办理」填写意见（可选）。</template>
+        <template v-else>，点击「提交办理」可填写意见（可选）。</template>
+      </p>
+      <div v-if="flowSubmitConfig.routes.length > 1" style="margin-bottom: 14px;">
+        <span style="font-size: 13px; color: #666; margin-right: 12px;">办理路由</span>
+        <el-radio-group v-model="selectedRouteValue" size="default">
+          <el-radio
+            v-for="r in flowSubmitConfig.routes"
+            :key="r.value"
+            :value="r.value"
+            style="display: flex; margin-bottom: 6px; align-items: flex-start; white-space: normal; height: auto;"
+          >
+            {{ r.label }}
+          </el-radio>
+        </el-radio-group>
+      </div>
+      <div v-if="isLevel2Process && hasSubIssues && !allCollaboratorsUpdated" style="margin-bottom: 12px; background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; gap: 8px;">
+        <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
+        <span style="font-size: 13px; color: #D48806;">提示：所有子问题的协同处理人均需更新进展后，才可继续提交下一步。当前还有 {{ pendingCollaboratorsCount }} 位处理人未更新进展。</span>
+      </div>
+      <div style="display: flex; justify-content: center; padding: 8px 0 2px;">
+        <el-button type="primary" size="large" :disabled="!canSubmitFlowStep" @click="openSubmitFlowDialog" style="min-width: 220px;">
+          提交办理
         </el-button>
       </div>
-      <el-timeline v-if="currentLogs.length > 0">
-        <el-timeline-item
-          v-for="log in currentLogs"
-          :key="log.id"
-          :timestamp="log.date"
-          placement="top"
-          :color="log.updateType === 'proactive' ? '#409EFF' : '#67C23A'"
-        >
-          <div style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; border: 1px solid #e8e8e8;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="font-size: 13px; font-weight: 600; color: #333;">{{ log.user }}</span>
-                <el-tag v-if="log.updateType === 'proactive'" type="primary" size="small">主动更新</el-tag>
-                <el-tag v-else type="success" size="small">例行更新</el-tag>
-              </div>
-              <span style="font-size: 12px; color: #999;">进度: {{ log.progress }}%</span>
-            </div>
-            <div style="font-size: 13px; color: #666; line-height: 1.6;">{{ log.content }}</div>
-          </div>
-        </el-timeline-item>
-      </el-timeline>
-      <el-empty v-else description="暂无进展更新记录" :image-size="60" />
     </div>
+
+    <!-- 子问题进展更新记录（表格） -->
+    <el-dialog
+      v-model="subProgressDialogVisible"
+      :title="subProgressDialogTitle"
+      width="720px"
+      destroy-on-close
+      class="sub-progress-dialog"
+    >
+      <el-table
+        v-if="subProgressTableRows.length > 0"
+        :data="subProgressTableRows"
+        border
+        size="small"
+        stripe
+        max-height="420"
+        :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '8px 0' }"
+      >
+        <el-table-column prop="date" label="更新时间" width="168" />
+        <el-table-column prop="user" label="更新人" width="96" show-overflow-tooltip />
+        <el-table-column prop="content" label="进展内容" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="progress" label="进度(%)" width="88" align="center" />
+        <el-table-column label="更新类型" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.updateType === 'proactive' ? 'primary' : 'success'" size="small">
+              {{ row.updateType === 'proactive' ? '主动更新' : '例行更新' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="暂无进展更新记录" :image-size="56" />
+    </el-dialog>
+
+    <!-- 纠错反馈弹框 -->
+    <el-dialog
+      v-model="correctionDialogVisible"
+      title="纠错反馈"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <div style="background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #ad6800;">
+        当前反馈处理人：{{ issue?.responsible || '发起人' }}（发起人）
+      </div>
+      <el-form label-width="80px" size="default">
+        <el-form-item label="反馈信息">
+          <el-input
+            v-model="correctionForm.content"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入纠错反馈信息"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="correctionDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCorrectionFeedback">提交反馈</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 流转记录弹框 -->
+    <el-dialog v-model="flowRecordDialogVisible" title="流转记录" width="720px" destroy-on-close>
+      <el-table
+        v-if="mergedFlowRecords.length > 0"
+        :data="mergedFlowRecords"
+        border
+        size="small"
+        stripe
+        max-height="420"
+        :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '8px 0' }"
+      >
+        <el-table-column prop="date" label="时间" width="168" />
+        <el-table-column prop="user" label="操作人" width="96" show-overflow-tooltip />
+        <el-table-column prop="action" label="动作" width="180" show-overflow-tooltip />
+        <el-table-column prop="remark" label="备注" min-width="220" show-overflow-tooltip />
+      </el-table>
+      <el-empty v-else description="暂无流转记录" :image-size="56" />
+    </el-dialog>
+
+    <!-- 流程图弹框 -->
+    <el-dialog v-model="flowChartDialogVisible" title="流程图" width="900px" destroy-on-close>
+      <div class="flow-chart-container" style="padding: 8px 0;">
+        <div v-for="(node, idx) in issueFlowSequence" :key="node.value" class="flow-node-wrapper">
+          <div :class="['flow-node-circle', getNodeStatus(node.value, issue.flowNode)]">
+            <span class="flow-node-idx">{{ idx + 1 }}</span>
+          </div>
+          <div class="flow-node-label" :class="{ active: node.value === issue.flowNode }">{{ node.label }}</div>
+          <div v-if="idx < issueFlowSequence.length - 1" :class="['flow-node-line', { done: isNodeDone(node.value, issue.flowNode) }]"></div>
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 提交办理意见弹框 -->
+    <el-dialog v-model="submitFlowDialogVisible" title="提交办理" width="520px" :close-on-click-modal="false">
+      <div v-if="selectedRoute" style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; color: #333;">
+        <div><strong>所选路由：</strong>{{ selectedRoute.label }}</div>
+        <div style="margin-top: 6px; color: #666;">目标环节：{{ getFlowNodeLabel(selectedRoute.targetNode) }}</div>
+      </div>
+      <el-form label-width="80px" size="default">
+        <el-form-item label="办理意见">
+          <el-input v-model="submitFlowOpinion" type="textarea" :rows="4" placeholder="选填：可填写说明、附件说明等" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="submitFlowDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSubmitFlow">确认提交</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 更新进展弹框 -->
     <el-dialog v-model="progressDialogVisible" title="更新进展" width="560px" :close-on-click-modal="false">
@@ -219,7 +339,7 @@
         <div style="font-size: 12px; color: #999; margin-top: 4px;">{{ issue.id }} | {{ issue.department }}</div>
       </div>
       <!-- 未全部更新时提示 -->
-      <div v-if="hasSubIssues && !allCollaboratorsUpdated" style="background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+      <div v-if="isLevel2Process && hasSubIssues && !allCollaboratorsUpdated" style="background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
         <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
         <span style="font-size: 12px; color: #D48806;">注意：仍有协同处理人未更新进展，当前仅可更新个人进展，无法提交到下一步流程节点。</span>
       </div>
@@ -316,11 +436,22 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, EditPen, Upload, Warning, Plus, CircleCheck, WarningFilled } from '@element-plus/icons-vue'
-import { mockIssues, progressLogs, departments } from '../mock/data'
+import { ArrowLeft, EditPen, Upload, Warning, Plus, CircleCheck, WarningFilled, List, Share } from '@element-plus/icons-vue'
+import {
+  mockIssues,
+  progressLogs,
+  subProgressLogs,
+  departments,
+  issueFlowSequence,
+  getIssueFlowSubmitConfig,
+  getIssueFlowNodeIndex,
+  flowRecords,
+  getFlowNodeLabel,
+  currentUser,
+} from '../mock/data'
 
 const route = useRoute()
 const issueId = route.params.id
@@ -334,18 +465,67 @@ if (found) {
 
 const hasSubIssues = computed(() => issue.value?.subIssues?.length > 0)
 
+/** 当前为二级办理且未办结时，可维护子问题协同与进展 */
+const isLevel2Process = computed(
+  () => issue.value?.flowNode === 'level2' && issue.value?.status !== 'completed',
+)
+
+/** 问题清单行：有 subIssues 则一行一条；否则用工单主信息合成一行 */
+const mergedIssueRows = computed(() => {
+  if (!issue.value) return []
+  const subs = issue.value.subIssues
+  if (subs?.length) {
+    return subs.map((sub, idx) => ({
+      subIdx: idx,
+      seq: idx + 1,
+      subId: sub.id,
+      title: sub.title,
+      categoryLabel: issue.value.categoryLabel,
+      handler: sub.handler,
+      deadline: sub.deadline,
+      mainDept: sub.mainDept || issue.value.department,
+      assistDeptsLabel: sub.assistDepts?.length ? sub.assistDepts.join('、') : '—',
+      status: sub.status,
+      statusLabel: sub.statusLabel,
+      progress: sub.progress,
+    }))
+  }
+  const title =
+    issue.value.description && issue.value.description !== '—'
+      ? issue.value.description
+      : issue.value.title
+  return [
+    {
+      subIdx: -1,
+      seq: 1,
+      subId: issue.value.id,
+      title,
+      categoryLabel: issue.value.categoryLabel || '—',
+      handler: issue.value.handler || issue.value.responsible || '—',
+      deadline: issue.value.deadline,
+      mainDept: issue.value.department || '—',
+      assistDeptsLabel: '—',
+      status: issue.value.status,
+      statusLabel: issue.value.statusLabel,
+      progress: issue.value.progress,
+    },
+  ]
+})
+
 const allCollaboratorsUpdated = computed(() => {
+  if (!isLevel2Process.value) return true
   if (!issue.value?.subIssues) return true
-  return issue.value.subIssues.every(sub =>
-    !sub.collaborators || sub.collaborators.length === 0 || sub.collaborators.every(c => c.hasUpdated)
+  return issue.value.subIssues.every(
+    (sub) => !sub.collaborators || sub.collaborators.length === 0 || sub.collaborators.every((c) => c.hasUpdated),
   )
 })
 
 const pendingCollaboratorsCount = computed(() => {
+  if (!isLevel2Process.value) return 0
   if (!issue.value?.subIssues) return 0
   return issue.value.subIssues.reduce((count, sub) => {
     if (!sub.collaborators) return count
-    return count + sub.collaborators.filter(c => !c.hasUpdated).length
+    return count + sub.collaborators.filter((c) => !c.hasUpdated).length
   }, 0)
 })
 
@@ -354,29 +534,151 @@ function isSubIssueAllUpdated(sub) {
   return sub.collaborators.every(c => c.hasUpdated)
 }
 
-const allFlowNodes = [
-  { value: 'initiate', label: '发起' },
-  { value: 'dept_review', label: '部门主任审核' },
-  { value: 'accept_review', label: '接单部门审核' },
-  { value: 'level1', label: '一级办理(副主任)' },
-  { value: 'level2', label: '二级办理(主管)' },
-  { value: 'accept_confirm', label: '接单部门确认' },
-  { value: 'initiator_confirm', label: '发起人确认' },
-  { value: 'completed', label: '已完结' },
-]
+const flowSubmitConfig = computed(() =>
+  issue.value ? getIssueFlowSubmitConfig(issue.value.flowNode) : { showProgressUpdate: false, routes: [] },
+)
+const correctionFeedbackNodes = ['level1', 'level2', 'receive_dept_director']
+const canShowCorrectionFeedback = computed(
+  () =>
+    !!issue.value &&
+    issue.value.status !== 'completed' &&
+    correctionFeedbackNodes.includes(issue.value.flowNode),
+)
 
-const nodeOrder = ['initiate', 'dept_review', 'accept_review', 'level1', 'level2', 'accept_confirm', 'initiator_confirm', 'completed']
+const selectedRouteValue = ref('')
+watch(
+  () => [issue.value?.flowNode, flowSubmitConfig.value.routes],
+  () => {
+    const routes = flowSubmitConfig.value.routes
+    if (!routes?.length) {
+      selectedRouteValue.value = ''
+      return
+    }
+    if (routes.length === 1) {
+      selectedRouteValue.value = routes[0].value
+      return
+    }
+    if (!routes.some((r) => r.value === selectedRouteValue.value)) {
+      selectedRouteValue.value = routes[0].value
+    }
+  },
+  { immediate: true, deep: true },
+)
+
+const selectedRoute = computed(() =>
+  flowSubmitConfig.value.routes.find((r) => r.value === selectedRouteValue.value),
+)
+
+const canSubmitFlowStep = computed(() => {
+  if (!selectedRoute.value) return false
+  if (isLevel2Process.value && hasSubIssues.value && !allCollaboratorsUpdated.value && selectedRoute.value.kind === 'forward') {
+    return false
+  }
+  return true
+})
+
+const flowRecordDialogVisible = ref(false)
+const flowChartDialogVisible = ref(false)
+const localFlowRecordAdds = ref([])
+
+const mergedFlowRecords = computed(() => {
+  const base = flowRecords[issueId] ? [...flowRecords[issueId]] : []
+  const merged = [...localFlowRecordAdds.value, ...base]
+  return merged.sort((a, b) => String(b.date).localeCompare(String(a.date)))
+})
+
+const submitFlowDialogVisible = ref(false)
+const submitFlowOpinion = ref('')
+const correctionDialogVisible = ref(false)
+const correctionForm = ref({ content: '' })
+
+function openSubmitFlowDialog() {
+  if (!canSubmitFlowStep.value) {
+    ElMessage.warning(
+      isLevel2Process.value && hasSubIssues.value
+        ? '尚有协同处理人未更新进展，无法按所选路由正向提交，请先督促更新或选择退回类路由。'
+        : '当前无法提交，请检查办理条件。',
+    )
+    return
+  }
+  submitFlowOpinion.value = ''
+  submitFlowDialogVisible.value = true
+}
+
+function openCorrectionDialog() {
+  correctionForm.value = { content: '' }
+  correctionDialogVisible.value = true
+}
+
+function submitCorrectionFeedback() {
+  const content = correctionForm.value.content?.trim()
+  if (!content) {
+    ElMessage.warning('请输入反馈信息')
+    return
+  }
+  localFlowRecordAdds.value.unshift({
+    id: `corr-${Date.now()}`,
+    date: new Date().toLocaleString('zh-CN', { hour12: false }),
+    user: currentUser.name,
+    action: '纠错反馈',
+    remark: `反馈给发起人（${issue.value?.responsible || '未设置'}）：${content}`,
+  })
+  ElMessage.success(`纠错反馈已提交，处理人：${issue.value?.responsible || '发起人'}`)
+  correctionDialogVisible.value = false
+}
+
+function confirmSubmitFlow() {
+  const route = selectedRoute.value
+  if (!route || !issue.value) return
+
+  const next = route.targetNode
+  issue.value.flowNode = next
+  issue.value.flowNodeLabel = getFlowNodeLabel(next)
+
+  if (next === 'completed') {
+    issue.value.status = 'completed'
+    issue.value.statusLabel = '已完成'
+    issue.value.progress = 100
+  }
+
+  const opinion = submitFlowOpinion.value.trim()
+  const remarkParts = [route.label]
+  if (opinion) remarkParts.push(`意见：${opinion}`)
+  localFlowRecordAdds.value.unshift({
+    id: `local-${Date.now()}`,
+    date: new Date().toLocaleString('zh-CN', { hour12: false }),
+    user: currentUser.name,
+    action: route.kind === 'end' ? '办结' : '流程流转',
+    remark: remarkParts.join('；'),
+  })
+
+  localLogs.value.unshift({
+    id: Date.now(),
+    date: new Date().toLocaleString('zh-CN', { hour12: false }),
+    user: currentUser.name,
+    content: opinion || `已提交办理：${route.label}`,
+    progress: issue.value.progress,
+    updateType: 'routine',
+  })
+
+  ElMessage.success('提交成功')
+  submitFlowDialogVisible.value = false
+}
 
 function getNodeStatus(nodeValue, currentNode) {
-  const currentIdx = nodeOrder.indexOf(currentNode)
-  const nodeIdx = nodeOrder.indexOf(nodeValue)
-  if (nodeIdx < currentIdx) return 'done'
-  if (nodeIdx === currentIdx) return 'current'
+  const cur = getIssueFlowNodeIndex(currentNode)
+  const idx = getIssueFlowNodeIndex(nodeValue)
+  if (cur < 0 || idx < 0) return 'pending'
+  if (idx < cur) return 'done'
+  if (idx === cur) return 'current'
   return 'pending'
 }
 
 function isNodeDone(nodeValue, currentNode) {
-  return nodeOrder.indexOf(nodeValue) < nodeOrder.indexOf(currentNode)
+  const cur = getIssueFlowNodeIndex(currentNode)
+  const idx = getIssueFlowNodeIndex(nodeValue)
+  if (cur < 0 || idx < 0) return false
+  return idx < cur
 }
 
 const isDeadlineNear = computed(() => {
@@ -392,14 +694,38 @@ const isOverdue = computed(() => {
 })
 
 const localLogs = ref([])
-const currentLogs = computed(() => {
-  const original = progressLogs[issueId] || []
-  const withType = original.map(log => ({
-    ...log,
-    updateType: log.updateType || 'routine',
-  }))
-  return [...localLogs.value, ...withType]
-})
+/** 按子问题编号追加的本地进展记录 */
+const localSubLogs = ref({})
+
+const subProgressDialogVisible = ref(false)
+const subProgressDialogTitle = ref('进展更新记录')
+const subProgressTableRows = ref([])
+
+function openSubProgressDialog(row) {
+  if (!issue.value) return
+  subProgressDialogTitle.value = `进展更新记录 — ${row.subId}`
+  let merged = []
+  if (row.subIdx < 0) {
+    const base = (progressLogs[issueId] || []).map((log) => ({
+      ...log,
+      updateType: log.updateType || 'routine',
+    }))
+    merged = [...localLogs.value.map((log) => ({ ...log, updateType: log.updateType || 'routine' })), ...base]
+  } else {
+    const base = (subProgressLogs[row.subId] || []).map((log) => ({
+      ...log,
+      updateType: log.updateType || 'routine',
+    }))
+    const local = (localSubLogs.value[row.subId] || []).map((log) => ({
+      ...log,
+      updateType: log.updateType || 'routine',
+    }))
+    merged = [...local, ...base]
+  }
+  merged.sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  subProgressTableRows.value = merged
+  subProgressDialogVisible.value = true
+}
 
 // ===== 进展更新 =====
 const progressDialogVisible = ref(false)
@@ -432,7 +758,7 @@ function submitProgress() {
     issue.value.delayedDeadline = dateStr
   }
   if (progressForm.value.status === 'completed') {
-    if (hasSubIssues.value && !allCollaboratorsUpdated.value) {
+    if (isLevel2Process.value && hasSubIssues.value && !allCollaboratorsUpdated.value) {
       ElMessage.warning('所有协同处理人需先更新进展，才能标记为已完成')
       return
     }
@@ -445,7 +771,7 @@ function submitProgress() {
   localLogs.value.unshift({
     id: Date.now(),
     date: new Date().toLocaleString('zh-CN'),
-    user: '段磊',
+    user: currentUser.name,
     content: progressForm.value.content,
     progress: progressForm.value.status === 'completed' ? 100 : progressForm.value.progress,
     updateType: progressForm.value.updateType,
@@ -510,6 +836,22 @@ function submitCollaboratorUpdate() {
     col.updateContent = collaboratorUpdateForm.value.content
     col.updateDate = new Date().toISOString().split('T')[0]
   }
+  const sid = sub.id
+  const nextLogs = {
+    ...localSubLogs.value,
+    [sid]: [
+      {
+        id: Date.now(),
+        date: new Date().toLocaleString('zh-CN', { hour12: false }),
+        user: currentCollaborator.value.name,
+        content: collaboratorUpdateForm.value.content,
+        progress: sub.progress,
+        updateType: 'proactive',
+      },
+      ...(localSubLogs.value[sid] || []),
+    ],
+  }
+  localSubLogs.value = nextLogs
   ElMessage.success(`${currentCollaborator.value.name} 的进展已更新`)
   collaboratorUpdateVisible.value = false
 
@@ -518,3 +860,99 @@ function submitCollaboratorUpdate() {
   }
 }
 </script>
+
+<style scoped>
+.form-page {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 0 4px;
+}
+.issue-list-merged {
+  padding-bottom: 4px;
+}
+.issue-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.issue-list-header-text {
+  flex: 1;
+  min-width: 0;
+}
+.issue-list-desc {
+  font-size: 12px;
+  color: #8c8c8c;
+  line-height: 1.55;
+  margin: 0;
+}
+.issue-list-table {
+  width: 100%;
+}
+.expand-inner {
+  padding: 12px 16px 14px 48px;
+  background: linear-gradient(180deg, #fafbfd 0%, #f5f7fa 100%);
+  border-top: 1px solid #ebeef5;
+}
+.expand-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.expand-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #595959;
+}
+.collab-nested-table {
+  width: 100%;
+}
+.collab-empty {
+  text-align: center;
+  padding: 14px;
+  color: #999;
+  font-size: 12px;
+  background: #fff;
+  border: 1px dashed #dcdfe6;
+  border-radius: 6px;
+}
+.collab-update-text {
+  font-size: 12px;
+  color: #333;
+}
+.collab-update-date {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+.collab-pending {
+  color: #e6a23c;
+  font-size: 12px;
+}
+.collab-done {
+  color: #67c23a;
+  font-size: 14px;
+}
+.collab-alert {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.collab-alert--ok {
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #389e0d;
+}
+.collab-alert--warn {
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  color: #d48806;
+}
+</style>

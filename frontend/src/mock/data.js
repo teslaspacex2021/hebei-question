@@ -11,6 +11,12 @@ export const issueCategories = [
   { value: 'other', label: '其他类' },
 ]
 
+// ===== 当前登录用户 =====
+export const currentUser = {
+  name: '段磊',
+  department: '信息技术部',
+}
+
 // ===== 部门列表 =====
 export const departments = [
   { value: 'office', label: '综合办公室' },
@@ -78,19 +84,117 @@ export const organizations = [
   { value: 'hs', label: '衡水分公司', children: [{ value: 'hs_market', label: '市场经营部' }] },
 ]
 
-// ===== 流程节点 =====
-export const flowNodes = [
-  { value: 'initiate', label: '发起', color: '#409EFF' },
-  { value: 'dept_review', label: '部门审核', color: '#E6A23C' },
-  { value: 'accept_review', label: '接单审核', color: '#E6A23C' },
+// ===== 调研问题全流程（1 发起在创建页；以下为 2–11 环节 + 结束）=====
+// 2 地市问题确认 → 3 发起人部门主任 → 4 接单部门主任 → 5 一级办理 → 6 二级办理
+// → 7 部门主任 → 8 发起人确认 → 9 地市区县评价 → 10 发起人确认（终验，可退回二级）→ 11 结束
+export const issueFlowSequence = [
+  { value: 'initiate', label: '发起', color: '#909399' },
+  { value: 'city_confirm', label: '地市问题确认', color: '#409EFF' },
+  { value: 'initiator_dept_director', label: '发起人部门主任', color: '#E6A23C' },
+  { value: 'receive_dept_director', label: '接单部门主任', color: '#E6A23C' },
   { value: 'level1', label: '一级办理', color: '#F56C6C' },
   { value: 'level2', label: '二级办理', color: '#F56C6C' },
-  { value: 'accept_confirm', label: '接单确认', color: '#67C23A' },
-  { value: 'initiator_confirm', label: '发起确认', color: '#67C23A' },
-  { value: 'completed', label: '已完结', color: '#909399' },
+  { value: 'dept_director', label: '部门主任', color: '#722ED1' },
+  { value: 'initiator_confirm', label: '发起人确认', color: '#67C23A' },
+  { value: 'city_eval', label: '地市区县评价', color: '#13C2C2' },
+  { value: 'initiator_final', label: '发起人确认（终验）', color: '#52C41A' },
+  { value: 'completed', label: '结束', color: '#909399' },
 ]
 
-// ===== 问题状态 =====
+/** 与 issueFlowSequence 一致，供列表/领导视图取色 */
+export const flowNodes = issueFlowSequence
+
+/** 主流程顺序（不含发起、结束），用于默认「提交至下一环节」 */
+export const issueFlowOrder = [
+  'city_confirm',
+  'initiator_dept_director',
+  'receive_dept_director',
+  'level1',
+  'level2',
+  'dept_director',
+  'initiator_confirm',
+  'city_eval',
+  'initiator_final',
+]
+
+export function getFlowNodeLabel(value) {
+  const n = issueFlowSequence.find((x) => x.value === value)
+  return n ? n.label : value || '—'
+}
+
+/**
+ * 详情页底部：是否可更新办理进展、可选路由（多选时需先选路由再提交办理）
+ * kind: forward | return | end
+ */
+export function getIssueFlowSubmitConfig(flowNode) {
+  if (!flowNode || flowNode === 'completed' || flowNode === 'initiate') {
+    return { showProgressUpdate: false, routes: [] }
+  }
+
+  const labelOf = (v) => getFlowNodeLabel(v)
+
+  const configs = {
+    city_confirm: {
+      showProgressUpdate: true,
+      routes: [
+        { value: 'to_initiator_dept', label: `提交至${labelOf('initiator_dept_director')}`, targetNode: 'initiator_dept_director', kind: 'forward' },
+      ],
+    },
+    initiator_dept_director: {
+      showProgressUpdate: false,
+      routes: [
+        { value: 'return_initiator', label: '退回发起人', targetNode: 'city_confirm', kind: 'return' },
+        { value: 'to_receive_dept', label: `提交至${labelOf('receive_dept_director')}`, targetNode: 'receive_dept_director', kind: 'forward' },
+      ],
+    },
+    receive_dept_director: {
+      showProgressUpdate: false,
+      routes: [
+        { value: 'return_initiator_dept', label: `退回${labelOf('initiator_dept_director')}`, targetNode: 'initiator_dept_director', kind: 'return' },
+        { value: 'to_level1', label: `提交至${labelOf('level1')}`, targetNode: 'level1', kind: 'forward' },
+      ],
+    },
+    level1: {
+      showProgressUpdate: true,
+      routes: [{ value: 'to_level2', label: `提交至${labelOf('level2')}`, targetNode: 'level2', kind: 'forward' }],
+    },
+    level2: {
+      showProgressUpdate: true,
+      routes: [{ value: 'to_dept_director', label: `提交至${labelOf('dept_director')}`, targetNode: 'dept_director', kind: 'forward' }],
+    },
+    dept_director: {
+      showProgressUpdate: false,
+      routes: [
+        { value: 'return_level2', label: `退回${labelOf('level2')}`, targetNode: 'level2', kind: 'return' },
+        { value: 'to_initiator_confirm', label: `提交至${labelOf('initiator_confirm')}`, targetNode: 'initiator_confirm', kind: 'forward' },
+      ],
+    },
+    initiator_confirm: {
+      showProgressUpdate: false,
+      routes: [{ value: 'to_city_eval', label: `提交至${labelOf('city_eval')}`, targetNode: 'city_eval', kind: 'forward' }],
+    },
+    city_eval: {
+      showProgressUpdate: true,
+      routes: [{ value: 'to_initiator_final', label: `提交至${labelOf('initiator_final')}`, targetNode: 'initiator_final', kind: 'forward' }],
+    },
+    initiator_final: {
+      showProgressUpdate: false,
+      routes: [
+        { value: 'finish', label: '结束', targetNode: 'completed', kind: 'end' },
+        { value: 'return_main_only', label: '仅退回主办', targetNode: 'level2', kind: 'return' },
+        { value: 'return_main_assist', label: '退回主协办', targetNode: 'level2', kind: 'return' },
+      ],
+    },
+  }
+
+  return configs[flowNode] || { showProgressUpdate: true, routes: [] }
+}
+
+/** 流程图节点状态：相对当前环节 */
+export function getIssueFlowNodeIndex(flowNode) {
+  return issueFlowSequence.findIndex((n) => n.value === flowNode)
+}
+
 export const issueStatuses = [
   { value: 'pending', label: '待处理', type: 'warning' },
   { value: 'in_progress', label: '解决中', type: 'primary' },
@@ -200,7 +304,7 @@ export const mockIssues = [
     category: 'other',
     categoryLabel: '其他类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 0,
     status: 'completed',
     statusLabel: '已完成',
@@ -224,7 +328,7 @@ export const mockIssues = [
     category: 'logistics',
     categoryLabel: '大后勤类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 0,
     status: 'completed',
     statusLabel: '已完成',
@@ -248,7 +352,7 @@ export const mockIssues = [
     category: 'business',
     categoryLabel: '经营业务类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 100,
     status: 'completed',
     statusLabel: '已完成',
@@ -272,7 +376,7 @@ export const mockIssues = [
     category: 'tech',
     categoryLabel: '后端技术类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 0,
     status: 'completed',
     statusLabel: '已完成',
@@ -296,7 +400,7 @@ export const mockIssues = [
     category: 'tech',
     categoryLabel: '后端技术类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 0,
     status: 'completed',
     statusLabel: '已完成',
@@ -320,7 +424,7 @@ export const mockIssues = [
     category: 'tech',
     categoryLabel: '后端技术类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 54,
     status: 'completed',
     statusLabel: '已完成',
@@ -344,7 +448,7 @@ export const mockIssues = [
     category: 'other',
     categoryLabel: '其他类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 0,
     status: 'completed',
     statusLabel: '已完成',
@@ -367,8 +471,8 @@ export const mockIssues = [
     title: '唐山地市营业厅服务标准化建设',
     category: 'service',
     categoryLabel: '客户服务类',
-    flowNode: 'accept_review',
-    flowNodeLabel: '接单审核',
+    flowNode: 'city_confirm',
+    flowNodeLabel: '地市问题确认',
     progress: 15,
     status: 'pending',
     statusLabel: '待处理',
@@ -439,8 +543,8 @@ export const mockIssues = [
     title: '廊坊数据中心安全加固方案',
     category: 'security',
     categoryLabel: '大安全类',
-    flowNode: 'dept_review',
-    flowNodeLabel: '部门审核',
+    flowNode: 'initiator_dept_director',
+    flowNodeLabel: '发起人部门主任',
     progress: 5,
     status: 'pending',
     statusLabel: '待处理',
@@ -463,8 +567,8 @@ export const mockIssues = [
     title: '沧州分公司人才梯队建设规划',
     category: 'strategy',
     categoryLabel: '战略规划类',
-    flowNode: 'accept_confirm',
-    flowNodeLabel: '接单确认',
+    flowNode: 'initiator_confirm',
+    flowNodeLabel: '发起人确认',
     progress: 90,
     status: 'in_progress',
     statusLabel: '解决中',
@@ -488,7 +592,7 @@ export const mockIssues = [
     category: 'tech',
     categoryLabel: '后端技术类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 0,
     status: 'completed',
     statusLabel: '已完成',
@@ -511,8 +615,8 @@ export const mockIssues = [
     title: '邢台农村宽带覆盖提升工程进展跟踪',
     category: 'business',
     categoryLabel: '经营业务类',
-    flowNode: 'level2',
-    flowNodeLabel: '二级办理',
+    flowNode: 'dept_director',
+    flowNodeLabel: '部门主任',
     progress: 45,
     status: 'in_progress',
     statusLabel: '解决中',
@@ -535,8 +639,8 @@ export const mockIssues = [
     title: '秦皇岛旅游旺季网络容量保障预案',
     category: 'tech',
     categoryLabel: '后端技术类',
-    flowNode: 'initiator_confirm',
-    flowNodeLabel: '发起确认',
+    flowNode: 'city_eval',
+    flowNodeLabel: '地市区县评价',
     progress: 95,
     status: 'in_progress',
     statusLabel: '解决中',
@@ -560,7 +664,7 @@ export const mockIssues = [
     category: 'strategy',
     categoryLabel: '战略规划类',
     flowNode: 'completed',
-    flowNodeLabel: '已完结',
+    flowNodeLabel: '结束',
     progress: 100,
     status: 'completed',
     statusLabel: '已完成',
@@ -577,6 +681,58 @@ export const mockIssues = [
     supervised: false,
     replyContent: '冬奥遗产网络设施维护方案已制定完毕并通过评审',
     expectedComplete: '已完成',
+  },
+  {
+    id: 'DY2026020019',
+    title: '衡水分公司政企专线 SLA 达标整改',
+    category: 'tech',
+    categoryLabel: '后端技术类',
+    flowNode: 'receive_dept_director',
+    flowNodeLabel: '接单部门主任',
+    progress: 22,
+    status: 'in_progress',
+    statusLabel: '解决中',
+    description: '衡水政企客户专线故障恢复时长未达 SLA，需接单部门主任分派主办部门',
+    updateDate: '2026-02-09',
+    responsible: '韩雪',
+    handler: '韩雪',
+    deadline: '2026-03-25',
+    department: '网络运维部',
+    surveyDate: '2026-02-05',
+    surveyLocation: '衡水',
+    leader: '王总',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-03-25',
+    pinned: false,
+    resolved: false,
+  },
+  {
+    id: 'DY2026020020',
+    title: '石家庄营业厅排队时长优化（终验）',
+    category: 'service',
+    categoryLabel: '客户服务类',
+    flowNode: 'initiator_final',
+    flowNodeLabel: '发起人确认（终验）',
+    progress: 98,
+    status: 'in_progress',
+    statusLabel: '解决中',
+    description: '营业厅排队系统与线上取号联调完成，等待发起人终验：可结束或退回二级办理',
+    updateDate: '2026-02-10',
+    responsible: '段磊',
+    handler: '段磊',
+    deadline: '2026-02-28',
+    department: '客户服务部',
+    surveyDate: '2026-01-28',
+    surveyLocation: '石家庄',
+    leader: '张总',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '区县评价已完成，满意度良好',
+    expectedComplete: '2026-02-28',
+    pinned: false,
+    resolved: false,
   },
 ]
 
@@ -637,6 +793,49 @@ export const deptStats = [
   { dept: '财务管理部', total: 1, pending: 0, inProgress: 1, completed: 0, overdue: 0, satisfaction: 0 },
 ]
 
+// ===== 流转记录（与流程节点变更对应，供详情弹窗展示）=====
+export const flowRecords = {
+  'DY2026020001': [
+    { id: 1, date: '2026-01-18 09:10', user: '段磊', action: '发起', remark: '调研问题录入' },
+    { id: 2, date: '2026-01-19 11:00', user: '石家庄地市管理员', action: '地市问题确认', remark: '问题属实，纳入省公司流程' },
+    { id: 3, date: '2026-01-20 14:20', user: '李主任', action: '发起人部门主任 → 接单部门主任', remark: '同意转办' },
+    { id: 4, date: '2026-01-21 10:00', user: '网络运维部王主任', action: '接单部门主任 → 一级办理', remark: '指定副主任牵头' },
+    { id: 5, date: '2026-01-23 16:30', user: '王志成', action: '一级办理 → 二级办理', remark: '进入主管现场处置' },
+  ],
+  'DY2026020010': [
+    { id: 1, date: '2026-02-02 09:00', user: '李明', action: '发起', remark: '唐山营业厅服务标准化需求' },
+    { id: 2, date: '2026-02-06 15:00', user: '唐山分公司', action: '待地市问题确认', remark: '市公司已核实问题背景' },
+  ],
+  'DY2026020013': [
+    { id: 1, date: '2026-02-04 10:00', user: '张伟', action: '发起', remark: '数据中心安全加固' },
+    { id: 2, date: '2026-02-07 09:30', user: '廊坊地市', action: '地市问题确认 → 发起人部门主任', remark: '同意上报' },
+    { id: 3, date: '2026-02-08 11:00', user: '安全保卫部张主任', action: '待发起人部门主任审核', remark: '可退回发起人或提交接单部门主任' },
+  ],
+  'DY2026020014': [
+    { id: 1, date: '2026-01-22 10:00', user: '孙丽', action: '发起', remark: '人才梯队建设' },
+    { id: 2, date: '2026-01-28 14:00', user: '沧州地市', action: '地市问题确认', remark: '确认' },
+    { id: 3, date: '2026-01-29 09:00', user: '人力资源部主任', action: '多级办理完成', remark: '方案已定稿' },
+    { id: 4, date: '2026-02-03 16:00', user: '网络运维部主任', action: '部门主任 → 发起人确认', remark: '请发起人确认方案' },
+  ],
+  'DY2026020017': [
+    { id: 1, date: '2026-01-18 14:00', user: '陈明', action: '发起', remark: '旅游旺季容量保障' },
+    { id: 2, date: '2026-01-25 10:30', user: '秦皇岛地市', action: '地市问题确认', remark: '同意' },
+    { id: 3, date: '2026-01-30 11:00', user: '网络运维部主任', action: '部门主任 → 发起人确认', remark: '' },
+    { id: 4, date: '2026-02-01 09:00', user: '陈明', action: '发起人确认 → 地市区县评价', remark: '同意进入区县评价' },
+    { id: 5, date: '2026-02-02 10:00', user: '海港区公司', action: '地市区县评价', remark: '评价：方案可行，建议加强应急演练' },
+  ],
+  'DY2026020019': [
+    { id: 1, date: '2026-02-06 09:00', user: '韩雪', action: '发起', remark: '政企专线 SLA 整改' },
+    { id: 2, date: '2026-02-07 14:00', user: '衡水地市', action: '地市问题确认', remark: '确认' },
+    { id: 3, date: '2026-02-08 10:30', user: '省网络部对接人', action: '发起人部门主任 → 接单部门主任', remark: '请网络运维部接单' },
+  ],
+  'DY2026020020': [
+    { id: 1, date: '2026-02-01 09:00', user: '段磊', action: '发起', remark: '营业厅排队优化' },
+    { id: 2, date: '2026-02-04 16:00', user: '石家庄长安区', action: '地市区县评价', remark: '排队时长明显下降' },
+    { id: 3, date: '2026-02-10 09:00', user: '系统', action: '进入发起人确认（终验）', remark: '可选择：结束 / 仅退回主办 / 退回主协办' },
+  ],
+}
+
 // ===== 进展更新记录 =====
 export const progressLogs = {
   'DY2026020001': [
@@ -669,9 +868,46 @@ export const progressLogs = {
     { id: 2, date: '2026-01-31 09:00', user: '刘强', content: '已完成施工方案制定，进入实施阶段', progress: 25 },
   ],
   'DY2026020017': [
-    { id: 1, date: '2026-02-02 16:00', user: '陈明', content: '扩容预案已完成，等待发起人最终确认', progress: 95 },
-    { id: 2, date: '2026-01-25 10:30', user: '陈明', content: '完成景区网络容量评估和扩容方案制定', progress: 70 },
-    { id: 3, date: '2026-01-18 14:00', user: '陈明', content: '开始秦皇岛旅游景区网络现状分析', progress: 20 },
+    { id: 1, date: '2026-02-02 16:00', user: '陈明', content: '区县评价材料已汇总，等待发起人终验', progress: 95 },
+    { id: 2, date: '2026-02-01 09:00', user: '陈明', content: '发起人已确认方案，进入地市区县评价环节', progress: 88 },
+    { id: 3, date: '2026-01-25 10:30', user: '陈明', content: '完成景区网络容量评估和扩容方案制定', progress: 70 },
+    { id: 4, date: '2026-01-18 14:00', user: '陈明', content: '开始秦皇岛旅游景区网络现状分析', progress: 20 },
+  ],
+  'DY2026020010': [
+    { id: 1, date: '2026-02-07 10:00', user: '李明', content: '已补充营业厅现场照片及培训需求清单', progress: 15 },
+  ],
+  'DY2026020013': [
+    { id: 1, date: '2026-02-08 09:00', user: '张伟', content: '已整理等保测评初稿，报部门主任审核', progress: 5 },
+  ],
+  'DY2026020019': [
+    { id: 1, date: '2026-02-09 11:00', user: '韩雪', content: '已联系主办部门，准备下达一级办理任务', progress: 22 },
+  ],
+  'DY2026020020': [
+    { id: 1, date: '2026-02-10 08:30', user: '段磊', content: '终验材料已齐备，拟提交办结', progress: 98 },
+  ],
+}
+
+/** 各子问题进展更新记录（详情「更新记录」弹窗按子问题编号读取） */
+export const subProgressLogs = {
+  'DY2026020001-1': [
+    { id: 1, date: '2026-02-08 16:00', user: '王志成', content: '裕华区盲测点第二轮复测完成', progress: 80, updateType: 'routine' },
+    { id: 2, date: '2026-02-05 11:00', user: '李鹏', content: '配合完成网管侧指标核对', progress: 55, updateType: 'proactive' },
+    { id: 3, date: '2026-01-30 09:30', user: '王志成', content: '启动裕华区基站与室分联合排查', progress: 30, updateType: 'routine' },
+  ],
+  'DY2026020001-2': [
+    { id: 1, date: '2026-02-06 14:20', user: '段磊', content: '扩容方案初稿已提交内部评审', progress: 60, updateType: 'proactive' },
+    { id: 2, date: '2026-02-01 10:00', user: '段磊', content: '长安区需求摸排在途', progress: 35, updateType: 'routine' },
+  ],
+  'DY2026020001-3': [
+    { id: 1, date: '2026-02-07 09:00', user: '王志成', content: '新华区路测计划已排期', progress: 20, updateType: 'routine' },
+  ],
+  'DY2026020002-1': [
+    { id: 1, date: '2026-02-14 17:00', user: '何天坤', content: 'SOP 终稿发布并培训一线坐席', progress: 100, updateType: 'routine' },
+    { id: 2, date: '2026-02-10 09:00', user: '何天坤', content: 'SOP 部门会签通过', progress: 85, updateType: 'proactive' },
+  ],
+  'DY2026020002-2': [
+    { id: 1, date: '2026-02-08 15:30', user: '何天坤', content: '与信息技术部联调接口字段', progress: 70, updateType: 'routine' },
+    { id: 2, date: '2026-02-03 11:00', user: '何天坤', content: '投诉系统改造开发包已提测', progress: 40, updateType: 'routine' },
   ],
 }
 
@@ -936,5 +1172,33 @@ export const planTodos = [
     statusLabel: '待处理',
     createDate: '2026-01-01',
     content: '',
+  },
+]
+
+// ===== 问题处理纠错反馈待办（处理人为发起人）=====
+export const issueCorrectionTodos = [
+  {
+    id: 'CF2026020001',
+    issueId: 'DY2026020011',
+    issueTitle: '邯郸地区渠道合作伙伴激励政策调整',
+    handler: '赵刚',
+    status: 'pending',
+    statusLabel: '待处理',
+    currentStage: '发起人纠错处理',
+    deadline: '2026-02-12',
+    createDate: '2026-02-10',
+    feedback: '一级办理阶段发现区县数据口径不一致，请发起人核对后反馈处理意见。',
+  },
+  {
+    id: 'CF2026020002',
+    issueId: 'DY2026020019',
+    issueTitle: '衡水分公司政企专线 SLA 达标整改',
+    handler: '韩雪',
+    status: 'in_progress',
+    statusLabel: '处理中',
+    currentStage: '发起人纠错处理',
+    deadline: '2026-02-14',
+    createDate: '2026-02-11',
+    feedback: '接单部门主任环节发现主办部门划分有误，请发起人确认纠正。',
   },
 ]

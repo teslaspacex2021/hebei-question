@@ -58,66 +58,36 @@
       </div>
     </div>
 
-    <!-- 及时更新率 -->
-    <div class="filter-bar" style="margin-bottom: 12px;">
-      <span style="font-size: 13px; color: #666;">及时更新率：</span>
-      <span style="font-size: 16px; font-weight: 700; color: #1890FF;">88.4%</span>
-      <span class="rate-change down" style="font-size: 12px; margin-left: 4px;">▼ -11.6%</span>
-      <div style="flex: 1;"></div>
-      <span style="font-size: 12px; color: #999;">今日截止: <b style="color: #F5222D;">0</b></span>
-      <el-divider direction="vertical" />
-      <span style="font-size: 12px; color: #999;">今日新增: <b style="color: #D48806;">0</b></span>
-      <el-divider direction="vertical" />
-      <span style="font-size: 12px; color: #999;">今日完成: <b style="color: #52C41A;">0</b></span>
-      <el-divider direction="vertical" />
-      <span style="font-size: 12px; color: #999;">今日更新: <b style="color: #1890FF;">0</b></span>
-    </div>
-
-    <!-- 两栏布局：问题列表 + 图表 -->
+    <!-- 两栏布局：待办 + 图表 -->
     <el-row :gutter="12">
       <el-col :span="16">
         <div class="table-card">
           <div class="table-header">
-            <span class="table-title">最新问题动态</span>
-            <el-button type="primary" size="small" @click="$router.push('/issues')">查看全部</el-button>
+            <span class="table-title">待办</span>
           </div>
           <el-table
-            :data="recentIssues"
+            v-if="personalTodos.length > 0"
+            :data="personalTodos"
             class="compact-table"
             size="small"
             :header-cell-style="{ background: '#fafafa', color: '#333', fontWeight: 600, padding: '8px 0' }"
           >
-            <el-table-column prop="title" label="问题名称" min-width="180" show-overflow-tooltip>
-              <template #default="{ row }">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span v-if="row.supervised" class="supervise-badge">
-                    <el-icon :size="12"><Warning /></el-icon>
-                  </span>
-                  <span>{{ row.title }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="categoryLabel" label="分类" width="100" />
-            <el-table-column prop="flowNodeLabel" label="流程节点" width="90">
-              <template #default="{ row }">
-                <span class="flow-tag" :style="{ background: getFlowColor(row.flowNode) + '18', color: getFlowColor(row.flowNode) }">
-                  {{ row.flowNodeLabel }}
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column label="进度" width="100">
-              <template #default="{ row }">
-                <el-progress :percentage="row.progress" :stroke-width="6" :show-text="true" style="width: 80px;" />
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="80">
+            <el-table-column prop="title" label="待办事项" min-width="220" show-overflow-tooltip />
+            <el-table-column prop="typeLabel" label="流程类型" width="110" />
+            <el-table-column prop="currentStage" label="当前环节" min-width="130" show-overflow-tooltip />
+            <el-table-column label="状态" width="90">
               <template #default="{ row }">
                 <span :class="'status-tag status-' + row.status">{{ row.statusLabel }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="updateDate" label="更新日期" width="100" />
-            <el-table-column prop="responsible" label="负责人" width="70" />
+            <el-table-column prop="date" label="截止日期" width="110" />
+            <el-table-column label="操作" width="80">
+              <template #default="{ row }">
+                <el-button type="primary" link size="small" @click="handleTodo(row)">处理</el-button>
+              </template>
+            </el-table-column>
           </el-table>
+          <el-empty v-else description="暂无待办" :image-size="60" style="padding: 24px;" />
         </div>
       </el-col>
       <el-col :span="8">
@@ -140,9 +110,11 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
-import { mockIssues, issueCategories, flowNodes, deptStats } from '../mock/data'
+import { mockIssues, deptStats, planTodos, currentUser, supervisionOrders, issueOrganizes, issueCorrectionTodos } from '../mock/data'
 
+const router = useRouter()
 const chartRef = ref(null)
 const deptBarRef = ref(null)
 
@@ -158,15 +130,127 @@ const avgSatisfaction = computed(() => {
   return (rated.reduce((s, i) => s + i.satisfaction, 0) / rated.length).toFixed(1)
 })
 
-// 最近问题
-const recentIssues = computed(() =>
-  [...mockIssues].sort((a, b) => b.updateDate.localeCompare(a.updateDate)).slice(0, 10)
-)
+const personalTodos = computed(() => {
+  const todos = []
+  const seen = new Set()
+  const activeStatuses = ['pending', 'in_progress', 'overdue']
 
-// 流程节点颜色
-function getFlowColor(node) {
-  const fn = flowNodes.find(f => f.value === node)
-  return fn ? fn.color : '#909399'
+  planTodos
+    .filter(t => t.department === currentUser.department && t.status === 'pending')
+    .forEach(t => {
+      todos.push({
+        id: t.id,
+        title: t.title,
+        type: 'plan',
+        typeLabel: '调研计划',
+        currentStage: '计划填报',
+        status: t.status,
+        statusLabel: t.statusLabel,
+        date: t.createDate,
+        link: '/dept-board',
+      })
+      seen.add(t.id)
+    })
+
+  mockIssues.forEach(issue => {
+    const isParentResponsible = issue.responsible === currentUser.name
+
+    if (isParentResponsible && activeStatuses.includes(issue.status) && !seen.has(issue.id)) {
+      todos.push({
+        id: issue.id,
+        title: issue.title,
+        type: 'issue',
+        typeLabel: '调研问题处理',
+        currentStage: issue.flowNodeLabel || '—',
+        status: issue.status,
+        statusLabel: issue.statusLabel,
+        date: issue.deadline || issue.updateDate,
+        link: `/issues/${issue.id}`,
+      })
+      seen.add(issue.id)
+    }
+
+    issue.subIssues?.forEach(sub => {
+      if (isParentResponsible) return
+
+      const isHandler = sub.handler?.includes(currentUser.name)
+      const needUpdate = sub.collaborators?.some(c => c.name === currentUser.name && !c.hasUpdated)
+      if ((isHandler || needUpdate) && activeStatuses.includes(sub.status) && !seen.has(sub.id)) {
+        todos.push({
+          id: sub.id,
+          title: `${issue.title} - ${sub.title}`,
+          type: 'issue',
+          typeLabel: '调研问题处理',
+          currentStage: issue.flowNodeLabel || '—',
+          status: sub.status,
+          statusLabel: sub.statusLabel,
+          date: sub.deadline || issue.deadline || issue.updateDate,
+          link: `/issues/${issue.id}`,
+        })
+        seen.add(sub.id)
+      }
+    })
+  })
+
+  supervisionOrders
+    .filter(o => o.targetDept === currentUser.department && o.status !== 'completed')
+    .forEach(o => {
+      if (seen.has(o.id)) return
+      todos.push({
+        id: o.id,
+        title: `督办：${o.issueTitle}`,
+        type: 'supervision',
+        typeLabel: '领导督办',
+        currentStage: o.flowNodeLabel || '—',
+        status: o.status === 'in_progress' ? 'in_progress' : 'pending',
+        statusLabel: o.statusLabel || '督办中',
+        date: o.deadline || o.createDate,
+        link: '/leader',
+      })
+      seen.add(o.id)
+    })
+
+  issueOrganizes
+    .filter(item => item.department === currentUser.department && item.status === 'pending')
+    .forEach(item => {
+      if (seen.has(item.id)) return
+      todos.push({
+        id: item.id,
+        title: `问题整理：${item.id}`,
+        type: 'organize',
+        typeLabel: '部门问题整理',
+        currentStage: '待部门主任审批',
+        status: 'pending',
+        statusLabel: item.statusLabel || '待审批',
+        date: item.createDate,
+        link: '/dept-board',
+      })
+      seen.add(item.id)
+    })
+
+  issueCorrectionTodos
+    .filter(item => item.handler === currentUser.name && ['pending', 'in_progress', 'overdue'].includes(item.status))
+    .forEach(item => {
+      if (seen.has(item.id)) return
+      todos.push({
+        id: item.id,
+        title: `纠错：${item.issueTitle}`,
+        type: 'correction',
+        typeLabel: '调研纠错处理',
+        currentStage: item.currentStage || '发起人纠错处理',
+        status: item.status,
+        statusLabel: item.statusLabel || '待处理',
+        date: item.deadline || item.createDate,
+        link: `/issues/${item.issueId}`,
+      })
+      seen.add(item.id)
+    })
+
+  return todos
+})
+
+function handleTodo(todo) {
+  router.push(todo.link)
 }
 
 // 图表

@@ -153,29 +153,34 @@
             <span :style="{ color: isDeadlineNear(row) ? '#F5222D' : '#333' }">{{ row.deadline }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <div class="action-btns">
+            <div class="action-btns" style="gap: 2px; flex-wrap: nowrap;">
               <el-button
                 type="primary"
                 link
                 size="small"
-                @click.stop="openProgressDialog(row)"
-              >更新进展</el-button>
-              <el-dropdown trigger="click" @command="(cmd) => handleCommand(cmd, row)">
-                <el-button link size="small" @click.stop>
-                  <el-icon><MoreFilled /></el-icon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="detail">查看详情</el-dropdown-item>
-                    <el-dropdown-item command="edit">编辑</el-dropdown-item>
-                    <el-dropdown-item command="pin">{{ row.pinned ? '取消置顶' : '置顶' }}</el-dropdown-item>
-                    <el-dropdown-item v-if="row.status !== 'completed'" command="supervise">督办</el-dropdown-item>
-                    <el-dropdown-item divided command="delete" style="color: #F56C6C;">删除</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+                @click.stop="handleCommand('detail', row)"
+              >详情</el-button>
+              <el-button
+                type="primary"
+                link
+                size="small"
+                @click.stop="handleCommand('edit', row)"
+              >编辑</el-button>
+              <el-button
+                type="warning"
+                link
+                size="small"
+                @click.stop="handleCommand('pin', row)"
+              >{{ row.pinned ? '取消置顶' : '置顶' }}</el-button>
+              <el-button
+                v-if="row.status === 'draft'"
+                type="danger"
+                link
+                size="small"
+                @click.stop="handleCommand('delete', row)"
+              >删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -327,14 +332,25 @@ function showDetail(row) {
 function handleCommand(cmd, row) {
   if (cmd === 'detail') {
     showDetail(row)
+  } else if (cmd === 'edit') {
+    // 暂以详情页作为编辑入口
+    showDetail(row)
   } else if (cmd === 'pin') {
     const idx = localIssues.value.findIndex(i => i.id === row.id)
     if (idx !== -1) {
       localIssues.value[idx] = { ...localIssues.value[idx], pinned: !localIssues.value[idx].pinned }
       ElMessage.success(localIssues.value[idx].pinned ? '已置顶' : '已取消置顶')
     }
-  } else if (cmd === 'supervise') {
-    ElMessage.warning(`已对"${row.title}"发起督办`)
+  } else if (cmd === 'delete') {
+    if (row.status !== 'draft') {
+      ElMessage.warning('仅草稿状态的问题可以删除')
+      return
+    }
+    const idx = localIssues.value.findIndex(i => i.id === row.id)
+    if (idx !== -1) {
+      localIssues.value.splice(idx, 1)
+      ElMessage.success(`已删除草稿问题「${row.title}」`)
+    }
   }
 }
 

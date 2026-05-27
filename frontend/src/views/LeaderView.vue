@@ -129,12 +129,16 @@
               <span v-else style="color: #ccc;">—</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" width="120" fixed="right">
             <template #default="{ row }">
               <div class="action-btns">
-                <el-button type="warning" link size="small"
-                  v-if="row.status !== 'completed'"
-                  @click="handleSupervise(row)">督办</el-button>
+                <el-button
+                  type="warning"
+                  link
+                  size="small"
+                  v-if="row.status === 'completed'"
+                  @click="openSuperviseDialog(row)"
+                >督办</el-button>
                 <el-button type="primary" link size="small">详情</el-button>
               </div>
             </template>
@@ -189,8 +193,14 @@
               <el-table-column prop="responsible" label="负责人" width="70" />
               <el-table-column label="操作" width="80">
                 <template #default="{ row }">
-                  <el-button type="warning" link size="small" v-if="row.status !== 'completed'" @click.stop="handleSupervise(row)">督办</el-button>
-                  <el-button type="primary" link size="small" v-else>详情</el-button>
+                  <el-button
+                    type="warning"
+                    link
+                    size="small"
+                    v-if="row.status === 'completed'"
+                    @click.stop="openSuperviseDialog(row)"
+                  >督办</el-button>
+                  <el-button type="primary" link size="small">详情</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -198,6 +208,38 @@
         </div>
       </div>
     </template>
+
+    <!-- 发起督办弹窗 -->
+    <el-dialog
+      v-model="superviseDialogVisible"
+      title="发起督办"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <div v-if="superviseTarget" style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;">
+        <div style="font-size: 13px; font-weight: 600; color: #333;">{{ superviseTarget.title }}</div>
+        <div style="font-size: 12px; color: #999; margin-top: 4px;">
+          编号：{{ superviseTarget.id }} | 当前节点：{{ superviseTarget.flowNodeLabel }}
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #8c8c8c; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; padding: 8px 10px; margin-bottom: 12px;">
+        说明：发起督办后，该流程将从领导督办链路重新推进，请谨慎操作。
+      </div>
+      <el-form label-width="80px" size="default">
+        <el-form-item label="督办意见">
+          <el-input
+            v-model="superviseOpinion"
+            type="textarea"
+            :rows="4"
+            placeholder="选填：请说明督办原因、期望完成时间、重点关注事项等"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="superviseDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSupervise">确认发起督办</el-button>
+      </template>
+    </el-dialog>
 
     <!-- ========== 督办单视图 ========== -->
     <template v-if="viewMode === 'supervision'">
@@ -314,6 +356,11 @@ const categories = issueCategories
 const svOrders = ref(svOrdersData)
 const topDepts = ['网络运维部', '信息技术部', '客户服务部', '市场经营部', '战略发展部', '安全保卫部', '人力资源部', '行政后勤部']
 
+// 督办弹窗状态
+const superviseDialogVisible = ref(false)
+const superviseTarget = ref(null)
+const superviseOpinion = ref('')
+
 // 督办流程节点
 const svFlowNodes = [
   { value: 'leader', label: '领导发起' },
@@ -376,8 +423,28 @@ function getFlowColor(node) {
   return fn ? fn.color : '#909399'
 }
 
-function handleSupervise(row) {
-  ElMessage.warning(`已对"${row.title}"发起督办`)
+function openSuperviseDialog(row) {
+  if (row.status !== 'completed') {
+    ElMessage.warning('仅已结束的流程可以发起督办')
+    return
+  }
+  superviseTarget.value = row
+  superviseOpinion.value = ''
+  superviseDialogVisible.value = true
+}
+
+function confirmSupervise() {
+  if (!superviseTarget.value) {
+    superviseDialogVisible.value = false
+    return
+  }
+  const msg = superviseOpinion.value?.trim()
+  ElMessage.success(
+    msg
+      ? `已对"${superviseTarget.value.title}"发起督办：${msg}`
+      : `已对"${superviseTarget.value.title}"发起督办`,
+  )
+  superviseDialogVisible.value = false
 }
 
 function handleExport() {
