@@ -203,7 +203,7 @@ export const issueStatuses = [
 ]
 
 // ===== 模拟问题数据 =====
-export const mockIssues = [
+const _rawMockIssues = [
   {
     id: 'DY2026020001',
     title: '石家庄分公司5G网络覆盖优化方案',
@@ -234,23 +234,23 @@ export const mockIssues = [
         id: 'DY2026020001-1', title: '裕华区5G信号盲区排查', handler: '王志成', status: 'in_progress', statusLabel: '解决中', progress: 80, deadline: '2026-03-01',
         mainDept: '网络运维部', assistDepts: ['信息技术部'],
         collaborators: [
-          { id: 'c1', name: '王志成', dept: '网络运维部', role: 'main', hasUpdated: true, updateContent: '已完成裕华区80%基站排查', updateDate: '2026-02-08' },
-          { id: 'c2', name: '李鹏', dept: '信息技术部', role: 'assist', hasUpdated: true, updateContent: '已配合完成系统侧数据核查', updateDate: '2026-02-07' },
+          { id: 'c1', name: '王志成', dept: '网络运维部', role: 'main', hasUpdated: true, updateProgress: 100, updateContent: '已完成裕华区80%基站排查', updateDate: '2026-02-08' },
+          { id: 'c2', name: '李鹏', dept: '信息技术部', role: 'assist', hasUpdated: true, updateProgress: 100, updateContent: '已配合完成系统侧数据核查', updateDate: '2026-02-07' },
         ],
       },
       {
         id: 'DY2026020001-2', title: '长安区基站扩容方案', handler: '段磊', status: 'in_progress', statusLabel: '解决中', progress: 60, deadline: '2026-03-10',
         mainDept: '网络运维部', assistDepts: ['市场经营部'],
         collaborators: [
-          { id: 'c3', name: '段磊', dept: '网络运维部', role: 'main', hasUpdated: true, updateContent: '扩容方案初稿已完成', updateDate: '2026-02-06' },
-          { id: 'c4', name: '赵刚', dept: '市场经营部', role: 'assist', hasUpdated: false, updateContent: '', updateDate: '' },
+          { id: 'c3', name: '段磊', dept: '网络运维部', role: 'main', hasUpdated: true, updateProgress: 100, updateContent: '扩容方案初稿已完成', updateDate: '2026-02-06' },
+          { id: 'c4', name: '赵刚', dept: '市场经营部', role: 'assist', hasUpdated: false, updateProgress: 0, updateContent: '', updateDate: '' },
         ],
       },
       {
         id: 'DY2026020001-3', title: '新华区网络质量优化', handler: '王志成', status: 'pending', statusLabel: '待处理', progress: 20, deadline: '2026-03-15',
         mainDept: '网络运维部', assistDepts: [],
         collaborators: [
-          { id: 'c5', name: '王志成', dept: '网络运维部', role: 'main', hasUpdated: false, updateContent: '', updateDate: '' },
+          { id: 'c5', name: '王志成', dept: '网络运维部', role: 'main', hasUpdated: false, updateProgress: 0, updateContent: '', updateDate: '' },
         ],
       },
     ],
@@ -285,15 +285,15 @@ export const mockIssues = [
         id: 'DY2026020002-1', title: '投诉处理SOP修订', handler: '何天坤', status: 'completed', statusLabel: '已完成', progress: 100, deadline: '2026-02-15',
         mainDept: '客户服务部', assistDepts: [],
         collaborators: [
-          { id: 'c6', name: '何天坤', dept: '客户服务部', role: 'main', hasUpdated: true, updateContent: 'SOP修订完成并已发布', updateDate: '2026-02-14' },
+          { id: 'c6', name: '何天坤', dept: '客户服务部', role: 'main', hasUpdated: true, updateProgress: 100, updateContent: 'SOP修订完成并已发布', updateDate: '2026-02-14' },
         ],
       },
       {
         id: 'DY2026020002-2', title: '投诉处理系统改造', handler: '何天坤', status: 'in_progress', statusLabel: '解决中', progress: 70, deadline: '2026-02-25',
         mainDept: '客户服务部', assistDepts: ['信息技术部'],
         collaborators: [
-          { id: 'c7', name: '何天坤', dept: '客户服务部', role: 'main', hasUpdated: true, updateContent: '系统改造进行中，预计下周完成', updateDate: '2026-02-08' },
-          { id: 'c8', name: '段磊', dept: '信息技术部', role: 'assist', hasUpdated: false, updateContent: '', updateDate: '' },
+          { id: 'c7', name: '何天坤', dept: '客户服务部', role: 'main', hasUpdated: true, updateProgress: 85, updateContent: '系统改造进行中，预计下周完成', updateDate: '2026-02-08' },
+          { id: 'c8', name: '段磊', dept: '信息技术部', role: 'assist', hasUpdated: false, updateProgress: 0, updateContent: '', updateDate: '' },
         ],
       },
     ],
@@ -736,6 +736,114 @@ export const mockIssues = [
   },
 ]
 
+const ASSIST_DEPT_POOL = ['信息技术部', '市场经营部', '综合办公室', '行政后勤部', '人力资源部']
+const COLLAB_NAMES = ['李鹏', '张华', '王敏', '刘洋', '陈静', '周涛']
+
+function pickAssistDept(mainDept, slot) {
+  const pool = ASSIST_DEPT_POOL.filter((d) => d !== mainDept)
+  return pool[slot % pool.length] || pool[0]
+}
+
+function buildSubIssueCollaborators(issue, slot, handler, mainDept, assistDepts) {
+  const atLevel2 = issue.flowNode === 'level2' && issue.status !== 'completed'
+  const mainUpdated = atLevel2 && slot === 1
+  const collabs = [
+    {
+      id: `${issue.id}-c${slot}-m`,
+      name: handler,
+      dept: mainDept,
+      role: 'main',
+      hasUpdated: mainUpdated,
+      updateProgress: mainUpdated ? 100 : 0,
+      updateContent: mainUpdated ? '已提交本阶段办理情况说明' : '',
+      updateDate: mainUpdated ? '2026-02-08' : '',
+    },
+  ]
+  assistDepts.forEach((dept, i) => {
+    collabs.push({
+      id: `${issue.id}-c${slot}-a${i}`,
+      name: COLLAB_NAMES[(slot + i) % COLLAB_NAMES.length],
+      dept,
+      role: 'assist',
+      hasUpdated: false,
+      updateProgress: 0,
+      updateContent: '',
+      updateDate: '',
+    })
+  })
+  return collabs
+}
+
+function buildGeneratedSubIssue(issue, slot) {
+  const handler = (issue.handler || issue.responsible || '经办人').split(/[、,\s]+/)[0]
+  const mainDept = issue.department || '信息技术部'
+  const location = issue.surveyLocation || '本地'
+  const titles = [
+    `${location}事项一：需求梳理与方案设计`,
+    `${location}事项二：实施推进与协同办理`,
+    `${location}事项三：成效验收与总结闭环`,
+  ]
+  const statusSlots =
+    issue.status === 'completed'
+      ? [
+          { status: 'completed', statusLabel: '已完成' },
+          { status: 'completed', statusLabel: '已完成' },
+          { status: 'completed', statusLabel: '已完成' },
+        ]
+      : [
+          { status: 'in_progress', statusLabel: '解决中' },
+          { status: 'in_progress', statusLabel: '解决中' },
+          { status: 'pending', statusLabel: '待处理' },
+        ]
+  const st = statusSlots[slot - 1]
+  const base = Math.min(100, Math.max(0, (issue.progress || 0) + (slot - 2) * 10))
+  const assistDepts = slot === 2 ? [pickAssistDept(mainDept, slot)] : slot === 1 ? [pickAssistDept(mainDept, 0)] : []
+  return {
+    id: `${issue.id}-${slot}`,
+    title: titles[slot - 1],
+    handler,
+    status: st.status,
+    statusLabel: st.statusLabel,
+    progress: issue.status === 'completed' ? 100 : base,
+    deadline: issue.deadline,
+    mainDept,
+    assistDepts,
+    collaborators: buildSubIssueCollaborators(issue, slot, handler, mainDept, assistDepts),
+  }
+}
+
+/** 每条主问题固定 3 条子问题，便于详情页问题清单区分 */
+function ensureThreeSubIssues(issue) {
+  const map = new Map((issue.subIssues || []).map((s) => [s.id, s]))
+  for (let slot = 1; slot <= 3; slot += 1) {
+    const sid = `${issue.id}-${slot}`
+    if (!map.has(sid)) {
+      map.set(sid, buildGeneratedSubIssue(issue, slot))
+    }
+  }
+  return [1, 2, 3].map((slot) => map.get(`${issue.id}-${slot}`))
+}
+
+function withCollaboratorProgress(issue) {
+  return {
+    ...issue,
+    subIssues: issue.subIssues?.map((sub) => ({
+      ...sub,
+      collaborators: sub.collaborators?.map((c) => ({
+        ...c,
+        updateProgress: c.updateProgress ?? (c.hasUpdated ? 80 : 0),
+      })),
+    })),
+  }
+}
+
+export const mockIssues = _rawMockIssues
+  .map((issue) => ({
+    ...issue,
+    subIssues: ensureThreeSubIssues(issue),
+  }))
+  .map(withCollaboratorProgress)
+
 // ===== 调研计划数据 =====
 export const mockPlans = [
   {
@@ -888,7 +996,7 @@ export const progressLogs = {
 }
 
 /** 各子问题进展更新记录（详情「更新记录」弹窗按子问题编号读取） */
-export const subProgressLogs = {
+const _baseSubProgressLogs = {
   'DY2026020001-1': [
     { id: 1, date: '2026-02-08 16:00', user: '王志成', content: '裕华区盲测点第二轮复测完成', progress: 80, updateType: 'routine' },
     { id: 2, date: '2026-02-05 11:00', user: '李鹏', content: '配合完成网管侧指标核对', progress: 55, updateType: 'proactive' },
@@ -910,6 +1018,31 @@ export const subProgressLogs = {
     { id: 2, date: '2026-02-03 11:00', user: '何天坤', content: '投诉系统改造开发包已提测', progress: 40, updateType: 'routine' },
   ],
 }
+
+function defaultSubProgressLog(sub) {
+  return [
+    {
+      id: 1,
+      date: '2026-02-07 10:00',
+      user: (sub.handler || '经办人').split(/[、,\s]+/)[0],
+      content: `【${sub.title}】已登记首条进展`,
+      progress: sub.progress ?? 0,
+      updateType: 'routine',
+    },
+  ]
+}
+
+export const subProgressLogs = (() => {
+  const logs = { ..._baseSubProgressLogs }
+  mockIssues.forEach((issue) => {
+    issue.subIssues?.forEach((sub) => {
+      if (!logs[sub.id]?.length) {
+        logs[sub.id] = defaultSubProgressLog(sub)
+      }
+    })
+  })
+  return logs
+})()
 
 // ===== 督办单数据 =====
 export const supervisionOrders = [
@@ -947,6 +1080,24 @@ export const supervisionOrders = [
     logs: [
       { date: '2026-02-05 14:00', user: '刘洋', content: '已完成3个基站UPS改造' },
       { date: '2026-02-03 09:00', user: '王总', content: '发起督办，要求尽快解决供电问题' },
+    ],
+  },
+  {
+    id: 'DB2026020003',
+    issueId: 'DY2026020001',
+    issueTitle: '石家庄分公司5G网络覆盖优化方案',
+    leader: '张总',
+    targetDept: '信息技术部',
+    createDate: '2026-02-11',
+    deadline: '2026-02-18',
+    reason: '跨部门协同推进偏慢，需信息技术部加快系统侧能力支撑',
+    status: 'in_progress',
+    statusLabel: '督办中',
+    flowNode: 'level2',
+    flowNodeLabel: '二级办理（主管处理中）',
+    logs: [
+      { date: '2026-02-11 10:00', user: '张总', content: '发起督办，要求一周内形成系统优化落地计划' },
+      { date: '2026-02-11 15:30', user: '段磊', content: '已组织技术组评估网优需求并制定改造排期' },
     ],
   },
 ]
@@ -1200,5 +1351,17 @@ export const issueCorrectionTodos = [
     deadline: '2026-02-14',
     createDate: '2026-02-11',
     feedback: '接单部门主任环节发现主办部门划分有误，请发起人确认纠正。',
+  },
+  {
+    id: 'CF2026020003',
+    issueId: 'DY2026020001',
+    issueTitle: '石家庄分公司5G网络覆盖优化方案',
+    handler: '段磊',
+    status: 'pending',
+    statusLabel: '待处理',
+    currentStage: '发起人纠错处理',
+    deadline: '2026-02-15',
+    createDate: '2026-02-12',
+    feedback: '二级办理环节反馈：协办部门责任边界需重新确认，请发起人纠偏后再流转。',
   },
 ]

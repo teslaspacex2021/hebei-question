@@ -198,7 +198,7 @@
       </div>
     </div>
 
-    <!-- ========== 更新进展弹框（支持主动/例行区分 + 延期） ========== -->
+    <!-- 更新进展弹框 -->
     <el-dialog v-model="progressDialogVisible" title="更新进展" width="560px" :close-on-click-modal="false">
       <div v-if="progressForm.issue" style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;">
         <div style="font-size: 13px; color: #333; font-weight: 600;">{{ progressForm.issue.title }}</div>
@@ -210,22 +210,6 @@
         </el-form-item>
         <el-form-item label="进展描述" required>
           <el-input v-model="progressForm.content" type="textarea" :rows="4" placeholder="请输入进展描述内容..." />
-        </el-form-item>
-        <el-form-item label="问题状态">
-          <el-radio-group v-model="progressForm.status">
-            <el-radio value="in_progress">解决中</el-radio>
-            <el-radio value="completed">已完成</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="progressForm.issue && isIssueOverdue(progressForm.issue) && progressForm.status !== 'completed' && !progressForm.issue.delayedDeadline" label="延期时间">
-          <el-date-picker v-model="progressForm.delayedDeadline" type="date" placeholder="选择新的截止日期" style="width: 100%;" />
-          <div style="font-size: 11px; color: #E6A23C; margin-top: 4px;">已超截止时间，可申请延期（仅支持修改一次）</div>
-        </el-form-item>
-        <el-form-item label="更新类型">
-          <el-radio-group v-model="progressForm.updateType">
-            <el-radio value="proactive">主动更新</el-radio>
-            <el-radio value="routine">例行更新</el-radio>
-          </el-radio-group>
         </el-form-item>
         <el-form-item label="附件">
           <el-upload action="#" :auto-upload="false" :limit="5">
@@ -262,9 +246,6 @@ const progressForm = ref({
   issue: null,
   progress: 0,
   content: '',
-  status: 'in_progress',
-  updateType: 'proactive',
-  delayedDeadline: null,
 })
 
 const responsibleList = computed(() => [...new Set(localIssues.value.map(i => i.responsible))])
@@ -315,10 +296,6 @@ function isOverdue(row) {
   return row.status !== 'completed' && new Date(row.deadline) < new Date()
 }
 
-function isIssueOverdue(row) {
-  return row.status !== 'completed' && new Date(row.deadline) < new Date()
-}
-
 function isDeadlineNear(row) {
   if (row.status === 'completed') return false
   const diff = new Date(row.deadline) - new Date()
@@ -359,9 +336,6 @@ function openProgressDialog(row) {
     issue: row,
     progress: row.progress,
     content: '',
-    status: 'in_progress',
-    updateType: 'proactive',
-    delayedDeadline: null,
   }
   progressDialogVisible.value = true
 }
@@ -372,24 +346,12 @@ function submitProgress() {
     return
   }
   const issue = progressForm.value.issue
-  // 处理延期
-  if (progressForm.value.delayedDeadline && !issue.delayedDeadline) {
-    const dateStr = new Date(progressForm.value.delayedDeadline).toISOString().split('T')[0]
-    const idx = localIssues.value.findIndex(i => i.id === issue.id)
-    if (idx !== -1) {
-      localIssues.value[idx] = { ...localIssues.value[idx], delayedDeadline: dateStr }
-    }
-  }
-  // 更新问题状态
-  if (progressForm.value.status === 'completed') {
-    const idx = localIssues.value.findIndex(i => i.id === issue.id)
-    if (idx !== -1) {
-      localIssues.value[idx] = { ...localIssues.value[idx], status: 'completed', statusLabel: '已完成', progress: 100 }
-    }
-  } else {
-    const idx = localIssues.value.findIndex(i => i.id === issue.id)
-    if (idx !== -1) {
-      localIssues.value[idx] = { ...localIssues.value[idx], progress: progressForm.value.progress }
+  const idx = localIssues.value.findIndex(i => i.id === issue.id)
+  if (idx !== -1) {
+    localIssues.value[idx] = {
+      ...localIssues.value[idx],
+      progress: progressForm.value.progress,
+      updateDate: new Date().toISOString().split('T')[0],
     }
   }
   ElMessage.success('进展已更新')

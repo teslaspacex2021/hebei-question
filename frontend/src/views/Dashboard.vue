@@ -105,18 +105,80 @@
         </div>
       </el-col>
     </el-row>
+
+    <!-- 调研纠错处理 -->
+    <el-dialog
+      v-model="correctionHandleVisible"
+      title="调研纠错处理"
+      width="520px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <div v-if="correctionHandleTarget" class="correction-handle-body">
+        <div class="correction-issue-ref">
+          <span class="correction-issue-ref__label">调研问题单据</span>
+          <div class="correction-issue-ref__content">
+            <el-button type="primary" link @click="goCorrectionIssueDetail">
+              {{ correctionHandleTarget.issueId }}
+            </el-button>
+            <span class="correction-issue-ref__title">{{ correctionHandleTarget.issueTitle }}</span>
+          </div>
+        </div>
+        <div v-if="correctionHandleTarget.feedback" class="correction-feedback-hint">
+          纠错说明：{{ correctionHandleTarget.feedback }}
+        </div>
+        <el-form label-width="100px" size="default" style="margin-top: 12px;">
+          <el-form-item label="原主办部门">
+            <span style="font-size: 13px; color: #666;">{{ correctionHandleTarget.originalDept || '—' }}</span>
+          </el-form-item>
+          <el-form-item label="修正后部门" required>
+            <el-select
+              v-model="correctionCorrectedDept"
+              placeholder="请选择修正后的部门"
+              filterable
+              style="width: 100%;"
+            >
+              <el-option
+                v-for="d in departments"
+                :key="d.value"
+                :label="d.label"
+                :value="d.label"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="correctionHandleVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCorrectionHandle">确认修正</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { mockIssues, deptStats, planTodos, currentUser, supervisionOrders, issueOrganizes, issueCorrectionTodos } from '../mock/data'
+import {
+  mockIssues,
+  deptStats,
+  planTodos,
+  currentUser,
+  supervisionOrders,
+  issueOrganizes,
+  issueCorrectionTodos,
+  departments,
+} from '../mock/data'
 
 const router = useRouter()
 const chartRef = ref(null)
 const deptBarRef = ref(null)
+const processedCorrectionIds = ref(new Set())
+const correctionHandleVisible = ref(false)
+const correctionHandleTarget = ref(null)
+const correctionCorrectedDept = ref('')
 
 // 统计数据
 const totalIssues = computed(() => mockIssues.length)
@@ -205,7 +267,7 @@ const personalTodos = computed(() => {
         status: o.status === 'in_progress' ? 'in_progress' : 'pending',
         statusLabel: o.statusLabel || '督办中',
         date: o.deadline || o.createDate,
-        link: '/leader',
+        link: `/issues/${o.issueId}`,
       })
       seen.add(o.id)
     })
@@ -229,9 +291,15 @@ const personalTodos = computed(() => {
     })
 
   issueCorrectionTodos
-    .filter(item => item.handler === currentUser.name && ['pending', 'in_progress', 'overdue'].includes(item.status))
+    .filter(
+      item =>
+        item.handler === currentUser.name &&
+        ['pending', 'in_progress', 'overdue'].includes(item.status) &&
+        !processedCorrectionIds.value.has(item.id),
+    )
     .forEach(item => {
       if (seen.has(item.id)) return
+      const relatedIssue = mockIssues.find(i => i.id === item.issueId)
       todos.push({
         id: item.id,
         title: `纠错：${item.issueTitle}`,
@@ -241,6 +309,10 @@ const personalTodos = computed(() => {
         status: item.status,
         statusLabel: item.statusLabel || '待处理',
         date: item.deadline || item.createDate,
+        issueId: item.issueId,
+        issueTitle: item.issueTitle,
+        originalDept: relatedIssue?.department || item.originalDept || '—',
+        feedback: item.feedback || '',
         link: `/issues/${item.issueId}`,
       })
       seen.add(item.id)
@@ -250,7 +322,42 @@ const personalTodos = computed(() => {
 })
 
 function handleTodo(todo) {
+  if (todo.type === 'correction') {
+    openCorrectionHandleDialog(todo)
+    return
+  }
   router.push(todo.link)
+}
+
+function openCorrectionHandleDialog(todo) {
+  correctionHandleTarget.value = { ...todo }
+  correctionCorrectedDept.value = todo.originalDept && todo.originalDept !== '—' ? todo.originalDept : ''
+  correctionHandleVisible.value = true
+}
+
+function goCorrectionIssueDetail() {
+  const id = correctionHandleTarget.value?.issueId
+  if (id) router.push(`/issues/${id}`)
+}
+
+function submitCorrectionHandle() {
+  if (!correctionCorrectedDept.value) {
+    ElMessage.warning('请选择修正后的部门')
+    return
+  }
+  const target = correctionHandleTarget.value
+  if (!target) return
+  if (correctionCorrectedDept.value === target.originalDept) {
+    ElMessage.warning('修正后部门不能与原主办部门相同')
+    return
+  }
+  processedCorrectionIds.value.add(target.id)
+  ElMessage.success(
+    `已提交纠错：${target.issueTitle} 主办部门调整为「${correctionCorrectedDept.value}」`,
+  )
+  correctionHandleVisible.value = false
+  correctionHandleTarget.value = null
+  correctionCorrectedDept.value = ''
 }
 
 // 图表
@@ -300,3 +407,42 @@ onMounted(async () => {
   }
 })
 </script>
+
+<style scoped>
+.correction-handle-body {
+  font-size: 13px;
+}
+.correction-issue-ref {
+  background: #f6f8fa;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+.correction-issue-ref__label {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 6px;
+}
+.correction-issue-ref__content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.correction-issue-ref__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+.correction-feedback-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #ad6800;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  padding: 8px 10px;
+  line-height: 1.5;
+}
+</style>

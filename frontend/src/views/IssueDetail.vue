@@ -84,7 +84,7 @@
           <div class="form-section-title" style="margin-bottom: 6px;">问题清单</div>
           <p class="issue-list-desc">
             <template v-if="isLevel2Process">
-              当前为 <strong>二级办理</strong>：请展开各行维护「协同处理人」并更新进展；全部更新后方可提交至部门主任。
+              当前为 <strong>二级办理</strong>：请展开各行维护「协同处理人」，填写进展并将进度更新至 100%；全部达标后方可提交至部门主任。
             </template>
             <template v-else>
               与「子问题」为同一清单。协同处理、进展分工仅在 <strong>二级办理</strong> 环节办理，当前环节为只读查看。
@@ -129,7 +129,18 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="进展更新" min-width="180">
+                <el-table-column label="进度" width="108" align="center">
+                  <template #default="{ row: c }">
+                    <el-progress
+                      :percentage="c.updateProgress ?? 0"
+                      :stroke-width="6"
+                      :show-text="true"
+                      :status="isCollaboratorComplete(c) ? 'success' : undefined"
+                      style="width: 92px;"
+                    />
+                  </template>
+                </el-table-column>
+                <el-table-column label="进展更新" min-width="160">
                   <template #default="{ row: c }">
                     <div v-if="c.hasUpdated">
                       <span class="collab-update-text">{{ c.updateContent }}</span>
@@ -138,16 +149,22 @@
                     <span v-else class="collab-pending"><el-icon><WarningFilled /></el-icon> 待更新进展</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="状态" width="80" align="center">
+                <el-table-column label="状态" width="88" align="center">
                   <template #default="{ row: c }">
-                    <el-tag :type="c.hasUpdated ? 'success' : 'warning'" size="small">
-                      {{ c.hasUpdated ? '已更新' : '待更新' }}
+                    <el-tag :type="isCollaboratorComplete(c) ? 'success' : c.hasUpdated ? 'warning' : 'info'" size="small">
+                      {{ isCollaboratorComplete(c) ? '已完成' : c.hasUpdated ? '进行中' : '待更新' }}
                     </el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="72" align="center">
                   <template #default="{ row: c }">
-                    <el-button v-if="!c.hasUpdated" type="primary" link size="small" @click="openCollaboratorUpdateDialog(row.subIdx, c)">
+                    <el-button
+                      v-if="!isCollaboratorComplete(c)"
+                      type="primary"
+                      link
+                      size="small"
+                      @click="openCollaboratorUpdateDialog(row.subIdx, c)"
+                    >
                       更新
                     </el-button>
                     <span v-else class="collab-done"><el-icon><CircleCheck /></el-icon></span>
@@ -158,11 +175,11 @@
 
               <div v-if="isSubIssueAllUpdated(issue.subIssues[row.subIdx])" class="collab-alert collab-alert--ok">
                 <el-icon><CircleCheck /></el-icon>
-                <span>该子问题协同处理人已全部更新进展</span>
+                <span>该子问题协同处理人已全部更新且进度均为 100%</span>
               </div>
               <div v-else-if="issue.subIssues[row.subIdx].collaborators?.length" class="collab-alert collab-alert--warn">
                 <el-icon><WarningFilled /></el-icon>
-                <span>尚有 {{ issue.subIssues[row.subIdx].collaborators.filter(c => !c.hasUpdated).length }} 人未更新进展，无法提交至下一步</span>
+                <span>尚有 {{ countIncompleteCollaborators(issue.subIssues[row.subIdx]) }} 人未满足「已更新且进度 100%」，无法提交至下一步</span>
               </div>
             </div>
           </template>
@@ -185,9 +202,16 @@
             <el-progress :percentage="row.progress" :stroke-width="6" :show-text="true" style="width: 110px;" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" align="center" fixed="right">
+        <el-table-column label="操作" :width="isLevel2Process ? 168 : 100" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openSubProgressDialog(row)">更新记录</el-button>
+            <el-button
+              v-if="isLevel2Process && row.subIdx >= 0"
+              type="primary"
+              link
+              size="small"
+              @click="openSubIssueProgressDialog(row)"
+            >进展更新</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -216,7 +240,7 @@
       </div>
       <div v-if="isLevel2Process && hasSubIssues && !allCollaboratorsUpdated" style="margin-bottom: 12px; background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; gap: 8px;">
         <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
-        <span style="font-size: 13px; color: #D48806;">提示：所有子问题的协同处理人均需更新进展后，才可继续提交下一步。当前还有 {{ pendingCollaboratorsCount }} 位处理人未更新进展。</span>
+        <span style="font-size: 13px; color: #D48806;">提示：所有子问题的协同处理人均需完成进展更新且进度为 100% 后，才可继续提交下一步。当前还有 {{ pendingCollaboratorsCount }} 位未达标。</span>
       </div>
       <div style="display: flex; justify-content: center; padding: 8px 0 2px;">
         <el-button type="primary" size="large" :disabled="!canSubmitFlowStep" @click="openSubmitFlowDialog" style="min-width: 220px;">
@@ -333,15 +357,29 @@
     </el-dialog>
 
     <!-- 更新进展弹框 -->
-    <el-dialog v-model="progressDialogVisible" title="更新进展" width="560px" :close-on-click-modal="false">
+    <el-dialog
+      v-model="progressDialogVisible"
+      :title="progressTargetSubIdx !== null ? '子问题进展更新' : '更新进展'"
+      width="560px"
+      :close-on-click-modal="false"
+      @closed="progressTargetSubIdx = null"
+    >
       <div style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px;">
-        <div style="font-size: 13px; color: #333; font-weight: 600;">{{ issue.title }}</div>
-        <div style="font-size: 12px; color: #999; margin-top: 4px;">{{ issue.id }} | {{ issue.department }}</div>
+        <template v-if="progressTargetSubIdx !== null && issue.subIssues?.[progressTargetSubIdx]">
+          <div style="font-size: 13px; color: #333; font-weight: 600;">{{ issue.subIssues[progressTargetSubIdx].title }}</div>
+          <div style="font-size: 12px; color: #999; margin-top: 4px;">
+            {{ issue.subIssues[progressTargetSubIdx].id }} | 主单 {{ issue.id }}
+          </div>
+        </template>
+        <template v-else>
+          <div style="font-size: 13px; color: #333; font-weight: 600;">{{ issue.title }}</div>
+          <div style="font-size: 12px; color: #999; margin-top: 4px;">{{ issue.id }} | {{ issue.department }}</div>
+        </template>
       </div>
       <!-- 未全部更新时提示 -->
       <div v-if="isLevel2Process && hasSubIssues && !allCollaboratorsUpdated" style="background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
         <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
-        <span style="font-size: 12px; color: #D48806;">注意：仍有协同处理人未更新进展，当前仅可更新个人进展，无法提交到下一步流程节点。</span>
+        <span style="font-size: 12px; color: #D48806;">注意：协同处理人须全部完成进展更新且进度为 100% 后，方可提交到下一步流程节点。</span>
       </div>
       <el-form label-width="90px" size="default">
         <el-form-item label="当前进度" required>
@@ -349,25 +387,6 @@
         </el-form-item>
         <el-form-item label="进展描述" required>
           <el-input v-model="progressForm.content" type="textarea" :rows="4" placeholder="请输入进展描述内容..." />
-        </el-form-item>
-        <el-form-item label="问题状态">
-          <el-radio-group v-model="progressForm.status">
-            <el-radio value="in_progress">解决中</el-radio>
-            <el-radio value="completed">已完成</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="isOverdue && progressForm.status !== 'completed' && !issue.delayedDeadline" label="延期时间">
-          <el-date-picker v-model="progressForm.delayedDeadline" type="date" placeholder="选择新的截止日期" style="width: 100%;" />
-          <div style="font-size: 11px; color: #E6A23C; margin-top: 4px;">已超截止时间，可申请延期（仅支持修改一次）</div>
-        </el-form-item>
-        <el-form-item v-if="issue.delayedDeadline" label="延期信息">
-          <span style="color: #E6A23C;">已延期至 {{ issue.delayedDeadline }}（不可再次修改）</span>
-        </el-form-item>
-        <el-form-item label="更新类型">
-          <el-radio-group v-model="progressForm.updateType">
-            <el-radio value="proactive">主动更新</el-radio>
-            <el-radio value="routine">例行更新</el-radio>
-          </el-radio-group>
         </el-form-item>
         <el-form-item label="附件">
           <el-upload action="#" :auto-upload="false" :limit="5">
@@ -418,6 +437,15 @@
         </div>
       </div>
       <el-form label-width="80px" size="default">
+        <el-form-item label="当前进度" required>
+          <el-slider
+            v-model="collaboratorUpdateForm.progress"
+            :min="0"
+            :max="100"
+            show-input
+            style="padding-right: 20px;"
+          />
+        </el-form-item>
         <el-form-item label="进展内容" required>
           <el-input v-model="collaboratorUpdateForm.content" type="textarea" :rows="4" placeholder="请输入进展更新内容..." />
         </el-form-item>
@@ -512,26 +540,32 @@ const mergedIssueRows = computed(() => {
   ]
 })
 
+function isCollaboratorComplete(c) {
+  return !!c?.hasUpdated && (c.updateProgress ?? 0) >= 100
+}
+
+function countIncompleteCollaborators(sub) {
+  if (!sub?.collaborators?.length) return 0
+  return sub.collaborators.filter((c) => !isCollaboratorComplete(c)).length
+}
+
 const allCollaboratorsUpdated = computed(() => {
   if (!isLevel2Process.value) return true
   if (!issue.value?.subIssues) return true
   return issue.value.subIssues.every(
-    (sub) => !sub.collaborators || sub.collaborators.length === 0 || sub.collaborators.every((c) => c.hasUpdated),
+    (sub) => !sub.collaborators?.length || sub.collaborators.every((c) => isCollaboratorComplete(c)),
   )
 })
 
 const pendingCollaboratorsCount = computed(() => {
   if (!isLevel2Process.value) return 0
   if (!issue.value?.subIssues) return 0
-  return issue.value.subIssues.reduce((count, sub) => {
-    if (!sub.collaborators) return count
-    return count + sub.collaborators.filter((c) => !c.hasUpdated).length
-  }, 0)
+  return issue.value.subIssues.reduce((count, sub) => count + countIncompleteCollaborators(sub), 0)
 })
 
 function isSubIssueAllUpdated(sub) {
-  if (!sub.collaborators || sub.collaborators.length === 0) return false
-  return sub.collaborators.every(c => c.hasUpdated)
+  if (!sub.collaborators?.length) return false
+  return sub.collaborators.every((c) => isCollaboratorComplete(c))
 }
 
 const flowSubmitConfig = computed(() =>
@@ -596,7 +630,7 @@ function openSubmitFlowDialog() {
   if (!canSubmitFlowStep.value) {
     ElMessage.warning(
       isLevel2Process.value && hasSubIssues.value
-        ? '尚有协同处理人未更新进展，无法按所选路由正向提交，请先督促更新或选择退回类路由。'
+        ? '尚有协同处理人未完成进展更新或进度未满 100%，无法正向提交，请先督促更新或选择退回类路由。'
         : '当前无法提交，请检查办理条件。',
     )
     return
@@ -729,23 +763,39 @@ function openSubProgressDialog(row) {
 
 // ===== 进展更新 =====
 const progressDialogVisible = ref(false)
+/** null 为主单进展；>=0 为子问题清单行进展更新 */
+const progressTargetSubIdx = ref(null)
 const progressForm = ref({
   progress: 0,
   content: '',
-  status: 'in_progress',
-  updateType: 'proactive',
-  delayedDeadline: null,
 })
 
 function openProgressDialog() {
+  progressTargetSubIdx.value = null
   progressForm.value = {
     progress: issue.value?.progress || 0,
     content: '',
-    status: issue.value?.status === 'completed' ? 'completed' : 'in_progress',
-    updateType: 'proactive',
-    delayedDeadline: null,
   }
   progressDialogVisible.value = true
+}
+
+function openSubIssueProgressDialog(row) {
+  if (row.subIdx < 0 || !issue.value?.subIssues?.[row.subIdx]) return
+  progressTargetSubIdx.value = row.subIdx
+  const sub = issue.value.subIssues[row.subIdx]
+  progressForm.value = {
+    progress: sub.progress ?? 0,
+    content: '',
+  }
+  progressDialogVisible.value = true
+}
+
+function syncParentProgressFromSubs() {
+  const subs = issue.value?.subIssues
+  if (!subs?.length) return
+  const avg = Math.round(subs.reduce((sum, s) => sum + (s.progress || 0), 0) / subs.length)
+  issue.value.progress = avg
+  issue.value.updateDate = new Date().toISOString().split('T')[0]
 }
 
 function submitProgress() {
@@ -753,28 +803,45 @@ function submitProgress() {
     ElMessage.warning('请输入进展描述')
     return
   }
-  if (progressForm.value.delayedDeadline && !issue.value.delayedDeadline) {
-    const dateStr = new Date(progressForm.value.delayedDeadline).toISOString().split('T')[0]
-    issue.value.delayedDeadline = dateStr
-  }
-  if (progressForm.value.status === 'completed') {
-    if (isLevel2Process.value && hasSubIssues.value && !allCollaboratorsUpdated.value) {
-      ElMessage.warning('所有协同处理人需先更新进展，才能标记为已完成')
-      return
+
+  const subIdx = progressTargetSubIdx.value
+  if (subIdx !== null && subIdx >= 0) {
+    const sub = issue.value.subIssues[subIdx]
+    sub.progress = progressForm.value.progress
+    if (sub.status === 'pending') {
+      sub.status = 'in_progress'
+      sub.statusLabel = '解决中'
     }
-    issue.value.status = 'completed'
-    issue.value.statusLabel = '已完成'
-    issue.value.progress = 100
-  } else {
-    issue.value.progress = progressForm.value.progress
+    const sid = sub.id
+    localSubLogs.value = {
+      ...localSubLogs.value,
+      [sid]: [
+        {
+          id: Date.now(),
+          date: new Date().toLocaleString('zh-CN', { hour12: false }),
+          user: currentUser.name,
+          content: progressForm.value.content,
+          progress: sub.progress,
+          updateType: 'routine',
+        },
+        ...(localSubLogs.value[sid] || []),
+      ],
+    }
+    syncParentProgressFromSubs()
+    ElMessage.success(`子问题「${sub.title}」进展已更新`)
+    progressDialogVisible.value = false
+    return
   }
+
+  issue.value.progress = progressForm.value.progress
+  issue.value.updateDate = new Date().toISOString().split('T')[0]
   localLogs.value.unshift({
     id: Date.now(),
     date: new Date().toLocaleString('zh-CN'),
     user: currentUser.name,
     content: progressForm.value.content,
-    progress: progressForm.value.status === 'completed' ? 100 : progressForm.value.progress,
-    updateType: progressForm.value.updateType,
+    progress: progressForm.value.progress,
+    updateType: 'routine',
   })
   ElMessage.success('进展已更新')
   progressDialogVisible.value = false
@@ -804,6 +871,7 @@ function submitAddCollaborator() {
     dept: collaboratorForm.value.dept,
     role: collaboratorForm.value.role,
     hasUpdated: false,
+    updateProgress: 0,
     updateContent: '',
     updateDate: '',
   })
@@ -815,12 +883,15 @@ function submitAddCollaborator() {
 const collaboratorUpdateVisible = ref(false)
 const currentCollaborator = ref(null)
 const currentCollaboratorSubIdx = ref(null)
-const collaboratorUpdateForm = ref({ content: '' })
+const collaboratorUpdateForm = ref({ content: '', progress: 0 })
 
 function openCollaboratorUpdateDialog(subIdx, collaborator) {
   currentCollaboratorSubIdx.value = subIdx
   currentCollaborator.value = collaborator
-  collaboratorUpdateForm.value = { content: '' }
+  collaboratorUpdateForm.value = {
+    content: collaborator.updateContent || '',
+    progress: collaborator.updateProgress ?? 0,
+  }
   collaboratorUpdateVisible.value = true
 }
 
@@ -829,10 +900,12 @@ function submitCollaboratorUpdate() {
     ElMessage.warning('请输入进展内容')
     return
   }
+  const progress = collaboratorUpdateForm.value.progress ?? 0
   const sub = issue.value.subIssues[currentCollaboratorSubIdx.value]
   const col = sub.collaborators.find(c => c.id === currentCollaborator.value.id)
   if (col) {
     col.hasUpdated = true
+    col.updateProgress = progress
     col.updateContent = collaboratorUpdateForm.value.content
     col.updateDate = new Date().toISOString().split('T')[0]
   }
@@ -845,18 +918,22 @@ function submitCollaboratorUpdate() {
         date: new Date().toLocaleString('zh-CN', { hour12: false }),
         user: currentCollaborator.value.name,
         content: collaboratorUpdateForm.value.content,
-        progress: sub.progress,
+        progress,
         updateType: 'proactive',
       },
       ...(localSubLogs.value[sid] || []),
     ],
   }
   localSubLogs.value = nextLogs
-  ElMessage.success(`${currentCollaborator.value.name} 的进展已更新`)
   collaboratorUpdateVisible.value = false
 
-  if (isSubIssueAllUpdated(sub)) {
-    ElMessage.success(`子问题 ${sub.id} 的所有协同处理人已完成进展更新`)
+  if (isCollaboratorComplete(col)) {
+    ElMessage.success(`${currentCollaborator.value.name} 的进展已更新（进度 100%）`)
+    if (isSubIssueAllUpdated(sub)) {
+      ElMessage.success(`子问题 ${sub.id} 的协同处理人已全部达标`)
+    }
+  } else {
+    ElMessage.success(`${currentCollaborator.value.name} 的进展已保存，进度 ${progress}%（需达到 100% 方可提交下一步）`)
   }
 }
 </script>
