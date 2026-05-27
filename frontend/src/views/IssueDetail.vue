@@ -253,7 +253,7 @@
     <el-dialog
       v-model="subProgressDialogVisible"
       :title="subProgressDialogTitle"
-      width="720px"
+      width="820px"
       destroy-on-close
       class="sub-progress-dialog"
     >
@@ -266,9 +266,17 @@
         max-height="420"
         :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '8px 0' }"
       >
-        <el-table-column prop="date" label="更新时间" width="168" />
-        <el-table-column prop="user" label="更新人" width="96" show-overflow-tooltip />
-        <el-table-column prop="content" label="进展内容" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="date" label="更新时间" width="158" />
+        <el-table-column prop="user" label="更新人" width="88" show-overflow-tooltip />
+        <el-table-column prop="dept" label="部门" width="108" show-overflow-tooltip />
+        <el-table-column label="部门角色" width="88" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.deptRole === 'main' ? 'primary' : 'info'" size="small">
+              {{ deptRoleLabel(row.deptRole) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="content" label="进展内容" min-width="180" show-overflow-tooltip />
         <el-table-column prop="progress" label="进度(%)" width="88" align="center" />
         <el-table-column label="更新类型" width="100" align="center">
           <template #default="{ row }">
@@ -735,25 +743,47 @@ const subProgressDialogVisible = ref(false)
 const subProgressDialogTitle = ref('进展更新记录')
 const subProgressTableRows = ref([])
 
+function deptRoleLabel(role) {
+  return role === 'assist' ? '协办' : '主办'
+}
+
+function resolveLogDeptRole(log, sub) {
+  if (log.dept) {
+    return { dept: log.dept, deptRole: log.deptRole || 'main' }
+  }
+  const col = sub?.collaborators?.find((c) => c.name === log.user)
+  if (col) {
+    return { dept: col.dept, deptRole: col.role }
+  }
+  return {
+    dept: sub?.mainDept || issue.value?.department || '—',
+    deptRole: 'main',
+  }
+}
+
+function normalizeProgressLogRow(log, sub) {
+  const { dept, deptRole } = resolveLogDeptRole(log, sub)
+  return {
+    ...log,
+    updateType: log.updateType || 'routine',
+    dept,
+    deptRole,
+  }
+}
+
 function openSubProgressDialog(row) {
   if (!issue.value) return
   subProgressDialogTitle.value = `进展更新记录 — ${row.subId}`
+  const sub = row.subIdx >= 0 ? issue.value.subIssues?.[row.subIdx] : null
   let merged = []
   if (row.subIdx < 0) {
-    const base = (progressLogs[issueId] || []).map((log) => ({
-      ...log,
-      updateType: log.updateType || 'routine',
-    }))
-    merged = [...localLogs.value.map((log) => ({ ...log, updateType: log.updateType || 'routine' })), ...base]
+    const base = (progressLogs[issueId] || []).map((log) =>
+      normalizeProgressLogRow(log, { mainDept: issue.value.department }),
+    )
+    merged = [...localLogs.value.map((log) => normalizeProgressLogRow(log, null)), ...base]
   } else {
-    const base = (subProgressLogs[row.subId] || []).map((log) => ({
-      ...log,
-      updateType: log.updateType || 'routine',
-    }))
-    const local = (localSubLogs.value[row.subId] || []).map((log) => ({
-      ...log,
-      updateType: log.updateType || 'routine',
-    }))
+    const base = (subProgressLogs[row.subId] || []).map((log) => normalizeProgressLogRow(log, sub))
+    const local = (localSubLogs.value[row.subId] || []).map((log) => normalizeProgressLogRow(log, sub))
     merged = [...local, ...base]
   }
   merged.sort((a, b) => String(b.date).localeCompare(String(a.date)))
@@ -820,6 +850,8 @@ function submitProgress() {
           id: Date.now(),
           date: new Date().toLocaleString('zh-CN', { hour12: false }),
           user: currentUser.name,
+          dept: sub.mainDept || issue.value.department,
+          deptRole: 'main',
           content: progressForm.value.content,
           progress: sub.progress,
           updateType: 'routine',
@@ -839,6 +871,8 @@ function submitProgress() {
     id: Date.now(),
     date: new Date().toLocaleString('zh-CN'),
     user: currentUser.name,
+    dept: issue.value.department || currentUser.department,
+    deptRole: 'main',
     content: progressForm.value.content,
     progress: progressForm.value.progress,
     updateType: 'routine',
@@ -917,6 +951,8 @@ function submitCollaboratorUpdate() {
         id: Date.now(),
         date: new Date().toLocaleString('zh-CN', { hour12: false }),
         user: currentCollaborator.value.name,
+        dept: currentCollaborator.value.dept,
+        deptRole: currentCollaborator.value.role,
         content: collaboratorUpdateForm.value.content,
         progress,
         updateType: 'proactive',

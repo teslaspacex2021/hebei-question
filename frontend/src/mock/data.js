@@ -945,12 +945,12 @@ export const flowRecords = {
 }
 
 // ===== 进展更新记录 =====
-export const progressLogs = {
+const _baseProgressLogs = {
   'DY2026020001': [
-    { id: 1, date: '2026-02-09 14:30', user: '王志成', content: '已完成主城区信号测试，覆盖率提升至92%', progress: 76 },
-    { id: 2, date: '2026-02-05 10:15', user: '段磊', content: '方案已通过技术评审，进入实施阶段', progress: 60 },
-    { id: 3, date: '2026-01-28 16:00', user: '段磊', content: '完成现场勘测，初步方案已拟定', progress: 35 },
-    { id: 4, date: '2026-01-20 09:00', user: '段磊', content: '问题已接收，安排人员进行现场勘测', progress: 10 },
+    { id: 1, date: '2026-02-09 14:30', user: '王志成', dept: '网络运维部', deptRole: 'main', content: '已完成主城区信号测试，覆盖率提升至92%', progress: 76 },
+    { id: 2, date: '2026-02-05 10:15', user: '段磊', dept: '网络运维部', deptRole: 'main', content: '方案已通过技术评审，进入实施阶段', progress: 60 },
+    { id: 3, date: '2026-01-28 16:00', user: '段磊', dept: '网络运维部', deptRole: 'main', content: '完成现场勘测，初步方案已拟定', progress: 35 },
+    { id: 4, date: '2026-01-20 09:00', user: '段磊', dept: '网络运维部', deptRole: 'main', content: '问题已接收，安排人员进行现场勘测', progress: 10 },
   ],
   'DY2026020002': [
     { id: 1, date: '2026-02-08 11:20', user: '何天坤', content: '新投诉处理流程已上线试运行，处理时效缩短40%', progress: 82 },
@@ -995,45 +995,82 @@ export const progressLogs = {
   ],
 }
 
+function enrichIssueProgressLog(log, issue) {
+  return {
+    ...log,
+    updateType: log.updateType || 'routine',
+    dept: log.dept || issue?.department || '—',
+    deptRole: log.deptRole || 'main',
+  }
+}
+
+export const progressLogs = (() => {
+  const logs = {}
+  Object.entries(_baseProgressLogs).forEach(([issueId, entries]) => {
+    const issue = mockIssues.find((i) => i.id === issueId)
+    logs[issueId] = entries.map((log) => enrichIssueProgressLog(log, issue))
+  })
+  return logs
+})()
+
 /** 各子问题进展更新记录（详情「更新记录」弹窗按子问题编号读取） */
 const _baseSubProgressLogs = {
   'DY2026020001-1': [
-    { id: 1, date: '2026-02-08 16:00', user: '王志成', content: '裕华区盲测点第二轮复测完成', progress: 80, updateType: 'routine' },
-    { id: 2, date: '2026-02-05 11:00', user: '李鹏', content: '配合完成网管侧指标核对', progress: 55, updateType: 'proactive' },
-    { id: 3, date: '2026-01-30 09:30', user: '王志成', content: '启动裕华区基站与室分联合排查', progress: 30, updateType: 'routine' },
+    { id: 1, date: '2026-02-08 16:00', user: '王志成', dept: '网络运维部', deptRole: 'main', content: '裕华区盲测点第二轮复测完成', progress: 80, updateType: 'routine' },
+    { id: 2, date: '2026-02-05 11:00', user: '李鹏', dept: '信息技术部', deptRole: 'assist', content: '配合完成网管侧指标核对', progress: 55, updateType: 'proactive' },
+    { id: 3, date: '2026-01-30 09:30', user: '王志成', dept: '网络运维部', deptRole: 'main', content: '启动裕华区基站与室分联合排查', progress: 30, updateType: 'routine' },
   ],
   'DY2026020001-2': [
-    { id: 1, date: '2026-02-06 14:20', user: '段磊', content: '扩容方案初稿已提交内部评审', progress: 60, updateType: 'proactive' },
-    { id: 2, date: '2026-02-01 10:00', user: '段磊', content: '长安区需求摸排在途', progress: 35, updateType: 'routine' },
+    { id: 1, date: '2026-02-06 14:20', user: '段磊', dept: '网络运维部', deptRole: 'main', content: '扩容方案初稿已提交内部评审', progress: 60, updateType: 'proactive' },
+    { id: 2, date: '2026-02-01 10:00', user: '段磊', dept: '网络运维部', deptRole: 'main', content: '长安区需求摸排在途', progress: 35, updateType: 'routine' },
   ],
   'DY2026020001-3': [
-    { id: 1, date: '2026-02-07 09:00', user: '王志成', content: '新华区路测计划已排期', progress: 20, updateType: 'routine' },
+    { id: 1, date: '2026-02-07 09:00', user: '王志成', dept: '网络运维部', deptRole: 'main', content: '新华区路测计划已排期', progress: 20, updateType: 'routine' },
   ],
   'DY2026020002-1': [
-    { id: 1, date: '2026-02-14 17:00', user: '何天坤', content: 'SOP 终稿发布并培训一线坐席', progress: 100, updateType: 'routine' },
-    { id: 2, date: '2026-02-10 09:00', user: '何天坤', content: 'SOP 部门会签通过', progress: 85, updateType: 'proactive' },
+    { id: 1, date: '2026-02-14 17:00', user: '何天坤', dept: '客户服务部', deptRole: 'main', content: 'SOP 终稿发布并培训一线坐席', progress: 100, updateType: 'routine' },
+    { id: 2, date: '2026-02-10 09:00', user: '何天坤', dept: '客户服务部', deptRole: 'main', content: 'SOP 部门会签通过', progress: 85, updateType: 'proactive' },
   ],
   'DY2026020002-2': [
-    { id: 1, date: '2026-02-08 15:30', user: '何天坤', content: '与信息技术部联调接口字段', progress: 70, updateType: 'routine' },
-    { id: 2, date: '2026-02-03 11:00', user: '何天坤', content: '投诉系统改造开发包已提测', progress: 40, updateType: 'routine' },
+    { id: 1, date: '2026-02-08 15:30', user: '何天坤', dept: '客户服务部', deptRole: 'main', content: '与信息技术部联调接口字段', progress: 70, updateType: 'routine' },
+    { id: 2, date: '2026-02-03 11:00', user: '段磊', dept: '信息技术部', deptRole: 'assist', content: '配合完成接口联调用例', progress: 45, updateType: 'proactive' },
+    { id: 3, date: '2026-02-02 16:20', user: '何天坤', dept: '客户服务部', deptRole: 'main', content: '投诉系统改造开发包已提测', progress: 40, updateType: 'routine' },
   ],
 }
 
+function enrichSubProgressLog(log, sub) {
+  const col = sub.collaborators?.find((c) => c.name === log.user)
+  return {
+    ...log,
+    updateType: log.updateType || 'routine',
+    dept: log.dept || col?.dept || sub.mainDept || '—',
+    deptRole: log.deptRole || col?.role || 'main',
+  }
+}
+
 function defaultSubProgressLog(sub) {
+  const handler = (sub.handler || '经办人').split(/[、,\s]+/)[0]
   return [
-    {
-      id: 1,
-      date: '2026-02-07 10:00',
-      user: (sub.handler || '经办人').split(/[、,\s]+/)[0],
-      content: `【${sub.title}】已登记首条进展`,
-      progress: sub.progress ?? 0,
-      updateType: 'routine',
-    },
+    enrichSubProgressLog(
+      {
+        id: 1,
+        date: '2026-02-07 10:00',
+        user: handler,
+        content: `【${sub.title}】已登记首条进展`,
+        progress: sub.progress ?? 0,
+        updateType: 'routine',
+      },
+      sub,
+    ),
   ]
 }
 
 export const subProgressLogs = (() => {
-  const logs = { ..._baseSubProgressLogs }
+  const logs = {}
+  Object.entries(_baseSubProgressLogs).forEach(([subId, entries]) => {
+    const sub = mockIssues.flatMap((i) => i.subIssues || []).find((s) => s.id === subId)
+    logs[subId] = entries.map((log) => enrichSubProgressLog(log, sub || { mainDept: '—' }))
+  })
   mockIssues.forEach((issue) => {
     issue.subIssues?.forEach((sub) => {
       if (!logs[sub.id]?.length) {
