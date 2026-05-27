@@ -96,6 +96,38 @@ html, body, #app {
   color: inherit;
 }
 
+.sidebar .menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar .menu-item-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar .menu-todo-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #F5222D;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 .sidebar .el-sub-menu__title {
   height: 44px;
   line-height: 44px;
@@ -271,6 +303,7 @@ html, body, #app {
   line-height: 18px;
 }
 
+.status-draft { background: #F0F0F0; color: #595959; border: 1px solid #D9D9D9; }
 .status-pending { background: #FFF7E6; color: #D48806; border: 1px solid #FFE58F; }
 .status-in_progress { background: #E6F7FF; color: #1890FF; border: 1px solid #91D5FF; }
 .status-completed { background: #F6FFED; color: #52C41A; border: 1px solid #B7EB8F; }
@@ -683,6 +716,34 @@ html, body, #app {
   margin-top: 8px;
 }
 
+/* 督办单卡片：复用 batch-card，仅左侧红色色块强调督办属性 */
+.batch-card.sv-batch-card {
+  border-left: 4px solid #F56C6C;
+}
+
+.batch-card.sv-batch-card:hover {
+  border-color: #F56C6C;
+  box-shadow: 0 2px 8px rgba(245, 108, 108, 0.15);
+}
+
+.sv-batch-card .sv-meta-line {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.sv-batch-card .sv-reason {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.6;
+  padding: 6px 10px;
+  background: #fef0f0;
+  border-radius: 4px;
+  margin-top: 6px;
+}
+
 /* ===== 滚动条美化 ===== */
 ::-webkit-scrollbar {
   width: 6px;
@@ -700,4 +761,95 @@ html, body, #app {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+/* ===== 部门看板 - 排行卡片 ===== */
+.rank-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px 16px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #ebeef5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  min-height: 280px;
+}
+.rank-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 10px;
+}
+.rank-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+.rank-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.rank-no {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f0f2f5;
+  color: #909399;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.rank-no-1 {
+  background: linear-gradient(135deg, #ff9d2f, #ff6b35);
+  color: #fff;
+}
+.rank-no-2 {
+  background: linear-gradient(135deg, #b0bec5, #78909c);
+  color: #fff;
+}
+.rank-no-3 {
+  background: linear-gradient(135deg, #d4a373, #b08968);
+  color: #fff;
+}
+.rank-dept {
+  width: 88px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+.rank-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.rank-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.rank-value {
+  min-width: 56px;
+  text-align: right;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
 }

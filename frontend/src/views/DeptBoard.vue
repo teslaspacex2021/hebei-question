@@ -195,70 +195,98 @@
     <!-- 统计概览 -->
     <div v-if="viewMode === 'stats'">
       <el-row :gutter="12">
-        <el-col :span="12">
-          <div class="table-card" style="margin-bottom: 12px;">
-            <div class="table-header">
-              <span class="table-title">各部门问题数量</span>
+        <el-col :span="8" v-for="rank in rankCards" :key="rank.key">
+          <div class="rank-card">
+            <div class="rank-card-header">
+              <span class="rank-card-title">
+                <el-icon :size="16" :style="{ color: rank.color }"><component :is="rank.icon" /></el-icon>
+                {{ rank.title }}
+              </span>
+              <el-button type="primary" link size="small" @click="openMoreDialog(rank.key)">
+                查看更多 <el-icon><ArrowRight /></el-icon>
+              </el-button>
             </div>
-            <div ref="deptChartRef" class="chart-container"></div>
-          </div>
-        </el-col>
-        <el-col :span="12">
-          <div class="table-card" style="margin-bottom: 12px;">
-            <div class="table-header">
-              <span class="table-title">各部门满意度</span>
+            <div class="rank-list">
+              <div
+                v-for="(item, idx) in rank.topList"
+                :key="item.dept"
+                class="rank-item"
+              >
+                <span class="rank-no" :class="'rank-no-' + (idx + 1)">{{ idx + 1 }}</span>
+                <span class="rank-dept">{{ item.dept }}</span>
+                <div class="rank-bar-wrap">
+                  <div
+                    class="rank-bar"
+                    :style="{ width: rank.barWidth(item) + '%', background: rank.color }"
+                  ></div>
+                </div>
+                <span class="rank-value" :style="{ color: rank.color }">{{ rank.format(item) }}</span>
+              </div>
+              <el-empty v-if="!rank.topList.length" description="暂无数据" :image-size="40" />
             </div>
-            <div ref="satisfactionChartRef" class="chart-container"></div>
           </div>
         </el-col>
       </el-row>
-      <!-- 所有部门概览 -->
-      <div class="board-grid">
-        <div v-for="dept in allDeptStats" :key="dept.dept" class="board-card">
-          <div class="card-title">{{ dept.dept }}</div>
-          <div class="card-stats">
-            <div class="card-stat-item">
-              <div class="card-stat-value" style="color: #1890FF;">{{ dept.total }}</div>
-              <div class="card-stat-label">总数</div>
-            </div>
-            <div class="card-stat-item">
-              <div class="card-stat-value" style="color: #D48806;">{{ dept.pending }}</div>
-              <div class="card-stat-label">待处理</div>
-            </div>
-            <div class="card-stat-item">
-              <div class="card-stat-value" style="color: #52C41A;">{{ dept.completed }}</div>
-              <div class="card-stat-label">已完成</div>
-            </div>
-            <div class="card-stat-item">
-              <div class="card-stat-value" style="color: #F5222D;">{{ dept.overdue }}</div>
-              <div class="card-stat-label">超期</div>
-            </div>
-          </div>
-          <el-progress :percentage="dept.total > 0 ? Math.round(dept.completed / dept.total * 100) : 0" :stroke-width="6" />
-          <div style="display: flex; justify-content: space-between; margin-top: 8px;">
-            <span style="font-size: 11px; color: #999;">满意度</span>
-            <span style="font-size: 13px; font-weight: 600; color: #D48806;">{{ dept.satisfaction || '—' }}★</span>
-          </div>
-        </div>
-      </div>
     </div>
+
+    <!-- 全部部门数据弹框 -->
+    <el-dialog v-model="moreDialogVisible" :title="moreDialogTitle" width="880px" :close-on-click-modal="false">
+      <el-table
+        :data="moreDialogData"
+        class="compact-table"
+        size="small"
+        :header-cell-style="{ background: '#fafafa', color: '#333', fontWeight: 600 }"
+        :default-sort="moreDialogSort"
+        max-height="520"
+        stripe
+      >
+        <el-table-column type="index" label="排名" width="70" align="center">
+          <template #default="{ $index }">
+            <span class="rank-no" :class="'rank-no-' + ($index + 1)" v-if="$index < 3">{{ $index + 1 }}</span>
+            <span v-else style="color: #999;">{{ $index + 1 }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="dept" label="部门" min-width="140" />
+        <el-table-column prop="raised" label="提出问题数" width="120" align="center" sortable />
+        <el-table-column prop="handled" label="处理问题数" width="120" align="center" sortable />
+        <el-table-column prop="completed" label="已完成数" width="100" align="center" sortable />
+        <el-table-column label="完成率" width="140" align="center" sortable :sort-by="row => row.completionRate">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="row.completionRate"
+              :stroke-width="8"
+              :status="row.completionRate >= 80 ? 'success' : row.completionRate >= 50 ? '' : 'warning'"
+              style="width: 110px;"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column label="平均满意度" width="130" align="center" sortable :sort-by="row => row.satisfaction">
+          <template #default="{ row }">
+            <span v-if="row.satisfaction > 0" style="color: #D48806; font-weight: 600;">{{ row.satisfaction.toFixed(1) }} ★</span>
+            <span v-else style="color: #ccc;">—</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="moreDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
-import * as echarts from 'echarts'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { mockIssues, deptStats, organizations, planTodos, issueOrganizes } from '../mock/data'
-import { Download, Upload, EditPen, Clock, CircleCheck, Plus, Memo } from '@element-plus/icons-vue'
-import { Warning } from '@element-plus/icons-vue'
+import { mockIssues, deptStats, organizations, planTodos, issueOrganizes, getIssueInitiatorDept, departments } from '../mock/data'
+import {
+  Download, Upload, EditPen, Clock, CircleCheck, Plus, Memo,
+  Warning, ArrowRight, EditPen as EditPenIcon, Document, Star,
+} from '@element-plus/icons-vue'
 
 const selectedOrg = ref(['province', 'it'])
 const selectedDept = ref('信息技术部')
 const viewMode = ref('todo')
 const showOnlyVisible = ref(false)
-const deptChartRef = ref(null)
-const satisfactionChartRef = ref(null)
 
 // 待办相关
 const todoDialogVisible = ref(false)
@@ -368,61 +396,116 @@ const deptIssues = computed(() => {
     .map(i => ({ ...i, provinceVisible: i.status === 'completed' }))
 })
 
-// 图表初始化
-function initCharts() {
-  if (!deptChartRef.value || !satisfactionChartRef.value) return
+/**
+ * 部门维度全量统计（提出数、处理数、完成率、平均满意度）
+ * 来源：以 mockIssues 为基础统计「提出/处理」，满意度直接采用 deptStats 已配置值
+ */
+const deptStatsExtended = computed(() => {
+  const raisedMap = {}
+  const handledMap = {}
+  const completedMap = {}
 
-  const chart1 = echarts.init(deptChartRef.value)
-  chart1.setOption({
-    tooltip: { trigger: 'axis' },
-    grid: { left: 80, right: 20, top: 20, bottom: 30 },
-    xAxis: { type: 'value' },
-    yAxis: { type: 'category', data: deptStats.map(d => d.dept), axisLabel: { fontSize: 11 } },
-    series: [
-      { name: '已完成', type: 'bar', stack: 'total', data: deptStats.map(d => d.completed), itemStyle: { color: '#67C23A' } },
-      { name: '解决中', type: 'bar', stack: 'total', data: deptStats.map(d => d.inProgress), itemStyle: { color: '#409EFF' } },
-      { name: '待处理', type: 'bar', stack: 'total', data: deptStats.map(d => d.pending), itemStyle: { color: '#E6A23C' } },
-      { name: '超期', type: 'bar', stack: 'total', data: deptStats.map(d => d.overdue), itemStyle: { color: '#F56C6C' } },
-    ],
+  mockIssues.forEach(issue => {
+    if (issue.status === 'draft') return
+    const initDept = getIssueInitiatorDept(issue)
+    if (initDept) raisedMap[initDept] = (raisedMap[initDept] || 0) + 1
+    const handleDept = issue.department
+    if (handleDept) {
+      handledMap[handleDept] = (handledMap[handleDept] || 0) + 1
+      if (issue.status === 'completed') {
+        completedMap[handleDept] = (completedMap[handleDept] || 0) + 1
+      }
+    }
   })
 
-  const chart2 = echarts.init(satisfactionChartRef.value)
-  const validDepts = deptStats.filter(d => d.satisfaction > 0)
-  chart2.setOption({
-    tooltip: { trigger: 'axis' },
-    grid: { left: 80, right: 20, top: 20, bottom: 30 },
-    xAxis: { type: 'value', max: 5 },
-    yAxis: { type: 'category', data: validDepts.map(d => d.dept), axisLabel: { fontSize: 11 } },
-    series: [{
-      type: 'bar',
-      data: validDepts.map(d => d.satisfaction),
-      itemStyle: {
-        color: (params) => {
-          const v = params.value
-          if (v >= 4.5) return '#67C23A'
-          if (v >= 4) return '#409EFF'
-          if (v >= 3) return '#E6A23C'
-          return '#F56C6C'
-        }
-      },
-      label: { show: true, position: 'right', fontSize: 11 },
-    }],
-  })
+  const allDepts = new Set([
+    ...departments.map(d => d.label),
+    ...Object.keys(raisedMap),
+    ...Object.keys(handledMap),
+  ])
 
-  window.addEventListener('resize', () => { chart1.resize(); chart2.resize() })
+  return Array.from(allDepts).map(dept => {
+    const raised = raisedMap[dept] || 0
+    const handled = handledMap[dept] || 0
+    const completed = completedMap[dept] || 0
+    const satObj = deptStats.find(d => d.dept === dept)
+    const satisfaction = satObj?.satisfaction ?? 0
+    const completionRate = handled > 0 ? Math.round((completed / handled) * 100) : 0
+    return { dept, raised, handled, completed, satisfaction, completionRate }
+  })
+})
+
+const TOP_N = 5
+
+const raisedRank = computed(() =>
+  [...deptStatsExtended.value].sort((a, b) => b.raised - a.raised).slice(0, TOP_N)
+)
+const handledRank = computed(() =>
+  [...deptStatsExtended.value].sort((a, b) => b.handled - a.handled).slice(0, TOP_N)
+)
+const satisfactionRank = computed(() =>
+  [...deptStatsExtended.value]
+    .filter(d => d.satisfaction > 0)
+    .sort((a, b) => b.satisfaction - a.satisfaction)
+    .slice(0, TOP_N)
+)
+
+const rankCards = computed(() => {
+  const maxRaised = Math.max(1, ...raisedRank.value.map(d => d.raised))
+  const maxHandled = Math.max(1, ...handledRank.value.map(d => d.handled))
+  return [
+    {
+      key: 'raised',
+      title: '部门提出问题数量 TOP 5',
+      color: '#1890FF',
+      icon: EditPenIcon,
+      topList: raisedRank.value,
+      format: (item) => `${item.raised} 个`,
+      barWidth: (item) => (item.raised / maxRaised) * 100,
+    },
+    {
+      key: 'handled',
+      title: '部门处理问题数量 TOP 5',
+      color: '#52C41A',
+      icon: Document,
+      topList: handledRank.value,
+      format: (item) => `${item.handled} 个`,
+      barWidth: (item) => (item.handled / maxHandled) * 100,
+    },
+    {
+      key: 'satisfaction',
+      title: '部门满意度排行 TOP 5',
+      color: '#D48806',
+      icon: Star,
+      topList: satisfactionRank.value,
+      format: (item) => `${item.satisfaction.toFixed(1)} ★`,
+      barWidth: (item) => (item.satisfaction / 5) * 100,
+    },
+  ]
+})
+
+// 查看更多 - 全量部门数据弹框
+const moreDialogVisible = ref(false)
+const moreDialogTitle = ref('')
+const moreDialogSort = ref({ prop: 'raised', order: 'descending' })
+
+const moreDialogData = computed(() => {
+  const list = [...deptStatsExtended.value]
+  const prop = moreDialogSort.value.prop
+  return list.sort((a, b) => (b[prop] || 0) - (a[prop] || 0))
+})
+
+function openMoreDialog(key) {
+  if (key === 'raised') {
+    moreDialogTitle.value = '全部部门数据 - 按「提出问题数」排序'
+    moreDialogSort.value = { prop: 'raised', order: 'descending' }
+  } else if (key === 'handled') {
+    moreDialogTitle.value = '全部部门数据 - 按「处理问题数」排序'
+    moreDialogSort.value = { prop: 'handled', order: 'descending' }
+  } else if (key === 'satisfaction') {
+    moreDialogTitle.value = '全部部门数据 - 按「满意度」排序'
+    moreDialogSort.value = { prop: 'satisfaction', order: 'descending' }
+  }
+  moreDialogVisible.value = true
 }
-
-watch(viewMode, async (val) => {
-  if (val === 'stats') {
-    await nextTick()
-    initCharts()
-  }
-})
-
-onMounted(async () => {
-  if (viewMode.value === 'stats') {
-    await nextTick()
-    initCharts()
-  }
-})
 </script>

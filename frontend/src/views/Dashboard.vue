@@ -58,53 +58,74 @@
       </div>
     </div>
 
-    <!-- 两栏布局：待办 + 图表 -->
-    <el-row :gutter="12">
-      <el-col :span="16">
-        <div class="table-card">
-          <div class="table-header">
-            <span class="table-title">待办</span>
-          </div>
-          <el-table
-            v-if="personalTodos.length > 0"
-            :data="personalTodos"
-            class="compact-table"
-            size="small"
-            :header-cell-style="{ background: '#fafafa', color: '#333', fontWeight: 600, padding: '8px 0' }"
-          >
-            <el-table-column prop="title" label="待办事项" min-width="220" show-overflow-tooltip />
-            <el-table-column prop="typeLabel" label="流程类型" width="110" />
-            <el-table-column prop="currentStage" label="当前环节" min-width="130" show-overflow-tooltip />
-            <el-table-column label="状态" width="90">
-              <template #default="{ row }">
-                <span :class="'status-tag status-' + row.status">{{ row.statusLabel }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="date" label="截止日期" width="110" />
-            <el-table-column label="操作" width="80">
-              <template #default="{ row }">
-                <el-button type="primary" link size="small" @click="handleTodo(row)">处理</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-else description="暂无待办" :image-size="60" style="padding: 24px;" />
-        </div>
-      </el-col>
-      <el-col :span="8">
-        <div class="table-card" style="margin-bottom: 12px;">
-          <div class="table-header">
-            <span class="table-title">问题分类分布</span>
-          </div>
-          <div ref="chartRef" class="chart-container" style="height: 250px;"></div>
-        </div>
-        <div class="table-card">
-          <div class="table-header">
-            <span class="table-title">各部门完成率</span>
-          </div>
-          <div ref="deptBarRef" class="chart-container" style="height: 250px;"></div>
-        </div>
-      </el-col>
-    </el-row>
+    <!-- 待办模块 -->
+    <div class="table-card">
+      <div class="table-header todo-header">
+        <el-tabs v-model="todoTab" class="todo-tabs">
+          <el-tab-pane name="todo">
+            <template #label>
+              <span>待办</span>
+              <el-badge
+                v-if="personalTodos.length > 0"
+                :value="personalTodos.length"
+                class="todo-tab-badge"
+                type="danger"
+              />
+            </template>
+          </el-tab-pane>
+          <el-tab-pane name="done">
+            <template #label>
+              <span>已办</span>
+              <el-badge
+                v-if="personalDone.length > 0"
+                :value="personalDone.length"
+                class="todo-tab-badge"
+                type="info"
+              />
+            </template>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
+      <el-table
+        v-if="currentTodoList.length > 0"
+        :data="pagedCurrentTodoList"
+        class="compact-table todo-table"
+        size="small"
+        :header-cell-style="{ background: '#fafafa', color: '#333', fontWeight: 600, padding: '8px 0' }"
+        @row-click="handleTodo"
+      >
+        <el-table-column :label="todoTab === 'done' ? '已办事项' : '待办事项'" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="todo-title-link">{{ row.title }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="typeLabel" label="流程类型" width="110" />
+        <el-table-column prop="batch" label="所属调研批次" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span :style="{ color: row.batch && row.batch !== '—' ? '#595959' : '#bfbfbf' }">{{ row.batch || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="currentStage" label="当前环节" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="date" :label="todoTab === 'done' ? '完成日期' : '截止日期'" width="110" />
+      </el-table>
+      <div v-if="currentTodoList.length > 0" class="pagination-bar">
+        <span class="total-text">共 {{ currentTotal }} 条</span>
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="currentPageSize"
+          :page-sizes="[10, 20, 50]"
+          :total="currentTotal"
+          layout="sizes, prev, pager, next"
+          size="small"
+        />
+      </div>
+      <el-empty
+        v-else
+        :description="todoTab === 'done' ? '暂无已办' : '暂无待办'"
+        :image-size="60"
+        style="padding: 24px;"
+      />
+    </div>
 
     <!-- 调研纠错处理 -->
     <el-dialog
@@ -157,28 +178,30 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
 import {
   mockIssues,
-  deptStats,
   planTodos,
   currentUser,
   supervisionOrders,
   issueOrganizes,
   issueCorrectionTodos,
   departments,
+  getBatchNameByIssueId,
 } from '../mock/data'
 
 const router = useRouter()
-const chartRef = ref(null)
-const deptBarRef = ref(null)
 const processedCorrectionIds = ref(new Set())
 const correctionHandleVisible = ref(false)
 const correctionHandleTarget = ref(null)
 const correctionCorrectedDept = ref('')
+const todoTab = ref('todo')
+const todoPage = ref(1)
+const todoPageSize = ref(10)
+const donePage = ref(1)
+const donePageSize = ref(10)
 
 // 统计数据
 const totalIssues = computed(() => mockIssues.length)
@@ -209,6 +232,7 @@ const personalTodos = computed(() => {
         status: t.status,
         statusLabel: t.statusLabel,
         date: t.createDate,
+        batch: '—',
         link: '/dept-board',
       })
       seen.add(t.id)
@@ -216,6 +240,7 @@ const personalTodos = computed(() => {
 
   mockIssues.forEach(issue => {
     const isParentResponsible = issue.responsible === currentUser.name
+    const batchName = getBatchNameByIssueId(issue.id) || '—'
 
     if (isParentResponsible && activeStatuses.includes(issue.status) && !seen.has(issue.id)) {
       todos.push({
@@ -227,6 +252,7 @@ const personalTodos = computed(() => {
         status: issue.status,
         statusLabel: issue.statusLabel,
         date: issue.deadline || issue.updateDate,
+        batch: batchName,
         link: `/issues/${issue.id}`,
       })
       seen.add(issue.id)
@@ -247,6 +273,7 @@ const personalTodos = computed(() => {
           status: sub.status,
           statusLabel: sub.statusLabel,
           date: sub.deadline || issue.deadline || issue.updateDate,
+          batch: batchName,
           link: `/issues/${issue.id}`,
         })
         seen.add(sub.id)
@@ -267,6 +294,7 @@ const personalTodos = computed(() => {
         status: o.status === 'in_progress' ? 'in_progress' : 'pending',
         statusLabel: o.statusLabel || '督办中',
         date: o.deadline || o.createDate,
+        batch: getBatchNameByIssueId(o.issueId) || '—',
         link: `/issues/${o.issueId}`,
       })
       seen.add(o.id)
@@ -285,6 +313,7 @@ const personalTodos = computed(() => {
         status: 'pending',
         statusLabel: item.statusLabel || '待审批',
         date: item.createDate,
+        batch: '—',
         link: '/dept-board',
       })
       seen.add(item.id)
@@ -309,6 +338,7 @@ const personalTodos = computed(() => {
         status: item.status,
         statusLabel: item.statusLabel || '待处理',
         date: item.deadline || item.createDate,
+        batch: getBatchNameByIssueId(item.issueId) || '—',
         issueId: item.issueId,
         issueTitle: item.issueTitle,
         originalDept: relatedIssue?.department || item.originalDept || '—',
@@ -321,12 +351,171 @@ const personalTodos = computed(() => {
   return todos
 })
 
+const personalDone = computed(() => {
+  const dones = []
+  const seen = new Set()
+
+  planTodos
+    .filter(t => t.department === currentUser.department && t.status === 'completed')
+    .forEach(t => {
+      dones.push({
+        id: t.id,
+        title: t.title,
+        type: 'plan',
+        typeLabel: '调研计划',
+        currentStage: '已完成',
+        status: t.status,
+        statusLabel: t.statusLabel,
+        date: t.submitDate || t.createDate,
+        batch: '—',
+        link: '/dept-board',
+      })
+      seen.add(t.id)
+    })
+
+  mockIssues.forEach(issue => {
+    const isParentResponsible = issue.responsible === currentUser.name
+    const batchName = getBatchNameByIssueId(issue.id) || '—'
+    if (isParentResponsible && issue.status === 'completed' && !seen.has(issue.id)) {
+      dones.push({
+        id: issue.id,
+        title: issue.title,
+        type: 'issue',
+        typeLabel: '调研问题处理',
+        currentStage: issue.flowNodeLabel || '已办结',
+        status: issue.status,
+        statusLabel: issue.statusLabel,
+        date: issue.updateDate || issue.deadline,
+        batch: batchName,
+        link: `/issues/${issue.id}`,
+      })
+      seen.add(issue.id)
+    }
+
+    issue.subIssues?.forEach(sub => {
+      if (isParentResponsible) return
+      const isHandler = sub.handler?.includes(currentUser.name)
+      if (isHandler && sub.status === 'completed' && !seen.has(sub.id)) {
+        dones.push({
+          id: sub.id,
+          title: `${issue.title} - ${sub.title}`,
+          type: 'issue',
+          typeLabel: '调研问题处理',
+          currentStage: issue.flowNodeLabel || '已办结',
+          status: sub.status,
+          statusLabel: sub.statusLabel,
+          date: sub.deadline || issue.updateDate,
+          batch: batchName,
+          link: `/issues/${issue.id}`,
+        })
+        seen.add(sub.id)
+      }
+    })
+  })
+
+  supervisionOrders
+    .filter(o => o.targetDept === currentUser.department && o.status === 'completed')
+    .forEach(o => {
+      if (seen.has(o.id)) return
+      dones.push({
+        id: o.id,
+        title: `督办：${o.issueTitle}`,
+        type: 'supervision',
+        typeLabel: '领导督办',
+        currentStage: o.flowNodeLabel || '已办结',
+        status: 'completed',
+        statusLabel: o.statusLabel || '已完成',
+        date: o.deadline || o.createDate,
+        batch: getBatchNameByIssueId(o.issueId) || '—',
+        link: `/issues/${o.issueId}`,
+      })
+      seen.add(o.id)
+    })
+
+  issueOrganizes
+    .filter(item => item.department === currentUser.department && item.status !== 'pending')
+    .forEach(item => {
+      if (seen.has(item.id)) return
+      dones.push({
+        id: item.id,
+        title: `问题整理：${item.id}`,
+        type: 'organize',
+        typeLabel: '部门问题整理',
+        currentStage: item.statusLabel || '已审批',
+        status: item.status,
+        statusLabel: item.statusLabel || '已审批',
+        date: item.approveDate || item.createDate,
+        batch: '—',
+        link: '/dept-board',
+      })
+      seen.add(item.id)
+    })
+
+  issueCorrectionTodos
+    .filter(
+      item =>
+        item.handler === currentUser.name &&
+        (item.status === 'completed' || processedCorrectionIds.value.has(item.id)),
+    )
+    .forEach(item => {
+      if (seen.has(item.id)) return
+      dones.push({
+        id: item.id,
+        title: `纠错：${item.issueTitle}`,
+        type: 'correction',
+        typeLabel: '调研纠错处理',
+        currentStage: '已处理',
+        status: 'completed',
+        statusLabel: '已处理',
+        date: item.deadline || item.createDate,
+        batch: getBatchNameByIssueId(item.issueId) || '—',
+        issueId: item.issueId,
+        link: `/issues/${item.issueId}`,
+      })
+      seen.add(item.id)
+    })
+
+  return dones.sort((a, b) => String(b.date).localeCompare(String(a.date)))
+})
+
+const currentTodoList = computed(() =>
+  todoTab.value === 'done' ? personalDone.value : personalTodos.value,
+)
+
+const currentTotal = computed(() =>
+  todoTab.value === 'done' ? personalDone.value.length : personalTodos.value.length,
+)
+
+const currentPage = computed({
+  get: () => (todoTab.value === 'done' ? donePage.value : todoPage.value),
+  set: (v) => {
+    if (todoTab.value === 'done') donePage.value = v
+    else todoPage.value = v
+  },
+})
+
+const currentPageSize = computed({
+  get: () => (todoTab.value === 'done' ? donePageSize.value : todoPageSize.value),
+  set: (v) => {
+    if (todoTab.value === 'done') donePageSize.value = v
+    else todoPageSize.value = v
+  },
+})
+
+const pagedCurrentTodoList = computed(() => {
+  const page = currentPage.value
+  const size = currentPageSize.value
+  const start = (page - 1) * size
+  return currentTodoList.value.slice(start, start + size)
+})
+
 function handleTodo(todo) {
-  if (todo.type === 'correction') {
+  if (!todo) return
+  if (todoTab.value === 'todo' && todo.type === 'correction') {
     openCorrectionHandleDialog(todo)
     return
   }
-  router.push(todo.link)
+  if (todo.link) router.push(todo.link)
 }
 
 function openCorrectionHandleDialog(todo) {
@@ -360,52 +549,6 @@ function submitCorrectionHandle() {
   correctionCorrectedDept.value = ''
 }
 
-// 图表
-onMounted(async () => {
-  await nextTick()
-  if (!chartRef.value) return
-  const chart = echarts.init(chartRef.value)
-  const categoryCount = {}
-  mockIssues.forEach(i => {
-    categoryCount[i.categoryLabel] = (categoryCount[i.categoryLabel] || 0) + 1
-  })
-  chart.setOption({
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0, textStyle: { fontSize: 11 } },
-    series: [{
-      type: 'pie',
-      radius: ['35%', '60%'],
-      center: ['50%', '42%'],
-      data: Object.entries(categoryCount).map(([name, value]) => ({ name, value })),
-      label: { show: false },
-      emphasis: { label: { show: true, fontSize: 13 } },
-      itemStyle: { borderRadius: 4, borderColor: '#fff', borderWidth: 2 },
-    }],
-    color: ['#409EFF', '#67C23A', '#E6A23C', '#F56C6C', '#909399', '#722ED1', '#13C2C2'],
-  })
-  window.addEventListener('resize', () => chart.resize())
-
-  if (deptBarRef.value) {
-    const chart2 = echarts.init(deptBarRef.value)
-    const topDepts = deptStats.slice(0, 8)
-    chart2.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: { left: 80, right: 20, top: 10, bottom: 30 },
-      xAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
-      yAxis: { type: 'category', data: topDepts.map(d => d.dept), axisLabel: { fontSize: 11 } },
-      series: [{
-        type: 'bar',
-        data: topDepts.map(d => d.total > 0 ? Math.round(d.completed / d.total * 100) : 0),
-        itemStyle: {
-          color: (params) => params.value >= 80 ? '#67C23A' : params.value >= 50 ? '#409EFF' : '#F56C6C',
-        },
-        label: { show: true, position: 'right', fontSize: 11, formatter: '{c}%' },
-        barWidth: 14,
-      }],
-    })
-    window.addEventListener('resize', () => chart2.resize())
-  }
-})
 </script>
 
 <style scoped>
@@ -444,5 +587,40 @@ onMounted(async () => {
   border-radius: 6px;
   padding: 8px 10px;
   line-height: 1.5;
+}
+.todo-header {
+  padding: 0 16px;
+  border-bottom: none;
+}
+.todo-tabs {
+  width: 100%;
+}
+.todo-tabs :deep(.el-tabs__header) {
+  margin: 0;
+}
+.todo-tabs :deep(.el-tabs__item) {
+  font-weight: 600;
+  font-size: 14px;
+  height: 38px;
+  line-height: 38px;
+}
+.todo-tab-badge {
+  margin-left: 6px;
+}
+.todo-tab-badge :deep(.el-badge__content) {
+  height: 16px;
+  line-height: 14px;
+  padding: 0 5px;
+  font-size: 11px;
+  border: none;
+}
+.todo-table :deep(.el-table__row) {
+  cursor: pointer;
+}
+.todo-title-link {
+  color: #1f1f1f;
+}
+.todo-table :deep(.el-table__row:hover) .todo-title-link {
+  color: #1890ff;
 }
 </style>

@@ -195,7 +195,40 @@ export function getIssueFlowNodeIndex(flowNode) {
   return issueFlowSequence.findIndex((n) => n.value === flowNode)
 }
 
+/**
+ * 根据问题与目标流程节点，推导该路由对应的处理人与部门（演示数据）
+ * 返回 { name, dept }，无法推导时返回 null
+ */
+export function getRouteAssignee(issue, targetNode) {
+  if (!issue || !targetNode || targetNode === 'completed') return null
+  const dept = issue.department || '—'
+  const cityDept = `${issue.surveyLocation || ''}市公司`.trim() || '市公司'
+  const initiator = issue.leader || issue.responsible || '发起人'
+  switch (targetNode) {
+    case 'city_confirm':
+      return { name: initiator, dept: cityDept }
+    case 'initiator_dept_director':
+      return { name: `${cityDept}部门主任`, dept: cityDept }
+    case 'receive_dept_director':
+      return { name: `${dept}主任`, dept }
+    case 'level1':
+      return { name: `${dept}副主任`, dept }
+    case 'level2':
+      return { name: issue.responsible || issue.handler || '—', dept }
+    case 'dept_director':
+      return { name: `${dept}主任`, dept }
+    case 'initiator_confirm':
+    case 'initiator_final':
+      return { name: initiator, dept: cityDept }
+    case 'city_eval':
+      return { name: `${issue.surveyLocation || ''}评价组`.trim() || '市公司评价组', dept: cityDept }
+    default:
+      return null
+  }
+}
+
 export const issueStatuses = [
+  { value: 'draft', label: '草稿', type: 'info' },
   { value: 'pending', label: '待处理', type: 'warning' },
   { value: 'in_progress', label: '解决中', type: 'primary' },
   { value: 'completed', label: '已完成', type: 'success' },
@@ -734,6 +767,60 @@ const _rawMockIssues = [
     pinned: false,
     resolved: false,
   },
+  {
+    id: 'DY2026020901',
+    title: '雄安新区数字化运营试点（草稿）',
+    category: 'business',
+    categoryLabel: '经营业务类',
+    flowNode: 'initiate',
+    flowNodeLabel: '发起',
+    progress: 0,
+    status: 'draft',
+    statusLabel: '草稿',
+    description: '拟在雄安新区开展数字化运营试点，待完善调研背景与具体问题清单后提交办理',
+    updateDate: '2026-02-12',
+    responsible: '段磊',
+    handler: '',
+    deadline: '2026-03-31',
+    department: '信息技术部',
+    surveyDate: '2026-02-10',
+    surveyLocation: '雄安',
+    leader: '张总',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-03-31',
+    pinned: false,
+    resolved: false,
+    subIssues: [],
+  },
+  {
+    id: 'DY2026020902',
+    title: '邢台政企客户走访结果整理（草稿）',
+    category: 'service',
+    categoryLabel: '客户服务类',
+    flowNode: 'initiate',
+    flowNodeLabel: '发起',
+    progress: 0,
+    status: 'draft',
+    statusLabel: '草稿',
+    description: '近期完成邢台分公司政企客户走访，结果待整理后提交流转',
+    updateDate: '2026-02-11',
+    responsible: '段磊',
+    handler: '',
+    deadline: '2026-03-20',
+    department: '客户服务部',
+    surveyDate: '2026-02-08',
+    surveyLocation: '邢台',
+    leader: '李总',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-03-20',
+    pinned: false,
+    resolved: false,
+    subIssues: [],
+  },
 ]
 
 const ASSIST_DEPT_POOL = ['信息技术部', '市场经营部', '综合办公室', '行政后勤部', '人力资源部']
@@ -812,8 +899,9 @@ function buildGeneratedSubIssue(issue, slot) {
   }
 }
 
-/** 每条主问题固定 3 条子问题，便于详情页问题清单区分 */
+/** 每条主问题固定 3 条子问题，便于详情页问题清单区分（草稿状态保留原始子问题，可为空） */
 function ensureThreeSubIssues(issue) {
+  if (issue.status === 'draft') return issue.subIssues || []
   const map = new Map((issue.subIssues || []).map((s) => [s.id, s]))
   for (let slot = 1; slot <= 3; slot += 1) {
     const sid = `${issue.id}-${slot}`
@@ -900,6 +988,20 @@ export const deptStats = [
   { dept: '综合办公室', total: 1, pending: 0, inProgress: 0, completed: 1, overdue: 0, satisfaction: 5.0 },
   { dept: '财务管理部', total: 1, pending: 0, inProgress: 1, completed: 0, overdue: 0, satisfaction: 0 },
 ]
+
+/** 调研领导 → 所在部门：用于推导问题的「提出部门」 */
+const LEADER_DEPT_MAP = {
+  张总: '战略发展部',
+  李总: '市场经营部',
+  王总: '综合办公室',
+}
+
+/** 根据调研领导推导问题的「提出部门」（演示数据） */
+export function getIssueInitiatorDept(issue) {
+  if (!issue) return ''
+  if (issue.initiatorDept) return issue.initiatorDept
+  return LEADER_DEPT_MAP[issue.leader] || '战略发展部'
+}
 
 // ===== 流转记录（与流程节点变更对应，供详情弹窗展示）=====
 export const flowRecords = {
@@ -1209,6 +1311,17 @@ export const surveyBatches = [
   },
 ]
 
+/** 根据问题ID（或子问题ID）反查所属调研批次（返回名称，找不到返回空串） */
+export function getBatchNameByIssueId(issueId) {
+  if (!issueId) return ''
+  // 子问题ID 形如 SUB-DY2026020001-1，需先提取父问题ID
+  let parentId = issueId
+  const subMatch = String(issueId).match(/SUB-(DY\d+)/)
+  if (subMatch) parentId = subMatch[1]
+  const batch = surveyBatches.find(b => b.issueIds?.includes(parentId))
+  return batch ? batch.name : ''
+}
+
 // ===== 阶段总结数据（保留但不再在部门看板中显示） =====
 export const stageSummaries = [
   {
@@ -1361,6 +1474,80 @@ export const planTodos = [
     createDate: '2026-01-01',
     content: '',
   },
+  // === 信息技术部 - 补充更多待办/已办 ===
+  {
+    id: 'TB2026020001',
+    department: '信息技术部',
+    title: '2026年Q1专项调研计划填报（应用与中台）',
+    type: 'quarter',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-02-01',
+    content: '',
+  },
+  {
+    id: 'TB2026020002',
+    department: '信息技术部',
+    title: '2026年技术架构升级调研提报',
+    type: 'special',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-02-08',
+    content: '',
+  },
+  {
+    id: 'TB2026020003',
+    department: '信息技术部',
+    title: '2026年数据治理专项调研提报',
+    type: 'special',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-02-10',
+    content: '',
+  },
+  {
+    id: 'TB2026020004',
+    department: '信息技术部',
+    title: '2025年Q4调研复盘材料补交',
+    type: 'review',
+    status: 'pending',
+    statusLabel: '待处理',
+    createDate: '2026-02-12',
+    content: '',
+  },
+  {
+    id: 'TB2026010101',
+    department: '信息技术部',
+    title: '2025年下半年调研计划填报',
+    type: 'second_half',
+    status: 'completed',
+    statusLabel: '已完成',
+    createDate: '2025-07-01',
+    submitDate: '2025-07-12',
+    content: '已完成下半年计划填报：聚焦数据中台、移动办公、智能客服等3个方向。',
+  },
+  {
+    id: 'TB2026010102',
+    department: '信息技术部',
+    title: '2025年第四季度调研专项填报',
+    type: 'quarter',
+    status: 'completed',
+    statusLabel: '已完成',
+    createDate: '2025-10-01',
+    submitDate: '2025-10-08',
+    content: '完成Q4专项填报：营销中台、客户标签、地市分公司IT支撑。',
+  },
+  {
+    id: 'TB2026010103',
+    department: '信息技术部',
+    title: '2025年信创替换调研计划补充',
+    type: 'special',
+    status: 'completed',
+    statusLabel: '已完成',
+    createDate: '2025-11-10',
+    submitDate: '2025-11-20',
+    content: '已补充完成信创替换路线图调研，覆盖OS、数据库与办公套件三类。',
+  },
 ]
 
 // ===== 问题处理纠错反馈待办（处理人为发起人）=====
@@ -1400,5 +1587,29 @@ export const issueCorrectionTodos = [
     deadline: '2026-02-15',
     createDate: '2026-02-12',
     feedback: '二级办理环节反馈：协办部门责任边界需重新确认，请发起人纠偏后再流转。',
+  },
+  {
+    id: 'CF2026020004',
+    issueId: 'DY2026020013',
+    issueTitle: '唐山数据中心机房温控告警频发',
+    handler: '段磊',
+    status: 'in_progress',
+    statusLabel: '处理中',
+    currentStage: '发起人纠错处理',
+    deadline: '2026-02-18',
+    createDate: '2026-02-13',
+    feedback: '二级办理补充说明：告警归因存在偏差，请发起人确认责任部门并调整。',
+  },
+  {
+    id: 'CF2026020005',
+    issueId: 'DY2026020016',
+    issueTitle: '邢台分公司营销系统接口超时',
+    handler: '段磊',
+    status: 'pending',
+    statusLabel: '待处理',
+    currentStage: '发起人纠错处理',
+    deadline: '2026-02-20',
+    createDate: '2026-02-14',
+    feedback: '接单部门主任提出：接口问题涉及多系统，请发起人明确主办与协办范围。',
   },
 ]

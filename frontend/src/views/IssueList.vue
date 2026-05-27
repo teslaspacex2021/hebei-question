@@ -61,9 +61,6 @@
     <!-- 搜索和操作栏 -->
     <div class="filter-bar">
       <el-input v-model="searchText" placeholder="输入标题关键字" :prefix-icon="Search" style="width: 220px;" size="default" clearable />
-      <el-select v-model="filterDept" placeholder="负责人" size="default" clearable style="width: 120px;">
-        <el-option v-for="d in responsibleList" :key="d" :label="d" :value="d" />
-      </el-select>
       <div style="flex: 1;"></div>
       <span style="font-size: 12px; color: #999; margin-right: 8px;">排序：更新日期-升序</span>
       <el-button size="default" :icon="Filter">筛选</el-button>
@@ -163,6 +160,7 @@
                 @click.stop="handleCommand('detail', row)"
               >详情</el-button>
               <el-button
+                v-if="row.status === 'draft'"
                 type="primary"
                 link
                 size="small"
@@ -235,7 +233,6 @@ import { mockIssues, flowNodes, progressLogs } from '../mock/data'
 const router = useRouter()
 const activeTab = ref('all')
 const searchText = ref('')
-const filterDept = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const progressDialogVisible = ref(false)
@@ -247,8 +244,6 @@ const progressForm = ref({
   progress: 0,
   content: '',
 })
-
-const responsibleList = computed(() => [...new Set(localIssues.value.map(i => i.responsible))])
 
 const filteredIssues = computed(() => {
   let list = [...localIssues.value]
@@ -263,9 +258,6 @@ const filteredIssues = computed(() => {
   }
   if (searchText.value) {
     list = list.filter(i => i.title.includes(searchText.value))
-  }
-  if (filterDept.value) {
-    list = list.filter(i => i.responsible === filterDept.value)
   }
   // 置顶问题排在前面
   return list.sort((a, b) => {

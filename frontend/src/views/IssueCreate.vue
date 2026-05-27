@@ -39,6 +39,16 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="16">
+          <el-col :span="24">
+            <el-form-item label="调研批次标题">
+              <el-input
+                v-model="form.batchTitle"
+                placeholder="例如：2026年1月张总石家庄调研"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
     </div>
 
@@ -151,6 +161,7 @@ const form = reactive({
   endDate: '',
   location: [],
   leader: '',
+  batchTitle: '',
   issues: [
     { __key: keyCounter++, resolved: false, category: '', content: '', mainDept: '', otherDepts: [], expectedDate: '', resolvedRemark: '' },
   ],

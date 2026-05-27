@@ -6,6 +6,7 @@
         <el-icon><ArrowLeft /></el-icon> 返回
       </el-button>
       <span style="font-size: 15px; font-weight: 600; color: #333; margin-left: 8px;">{{ issue.title }}</span>
+      <el-tag v-if="isDraft" type="info" effect="plain" size="small" style="margin-left: 8px;">草稿编辑中</el-tag>
       <el-tag v-if="issue.pinned" type="danger" size="small" style="margin-left: 8px;">置顶</el-tag>
       <div style="flex: 1;"></div>
       <el-button size="default" @click="flowRecordDialogVisible = true">
@@ -13,22 +14,6 @@
       </el-button>
       <el-button size="default" @click="flowChartDialogVisible = true">
         <el-icon><Share /></el-icon> 流程图
-      </el-button>
-      <el-button
-        v-if="canShowCorrectionFeedback"
-        type="warning"
-        size="default"
-        @click="openCorrectionDialog"
-      >
-        纠错反馈
-      </el-button>
-      <el-button
-        v-if="flowSubmitConfig.showProgressUpdate && issue.status !== 'completed'"
-        type="primary"
-        size="default"
-        @click="openProgressDialog"
-      >
-        <el-icon><EditPen /></el-icon> 更新进展
       </el-button>
     </div>
 
@@ -38,47 +23,108 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <div class="detail-item"><span class="detail-label">问题编号</span><span class="detail-value">{{ issue.id }}</span></div>
-          <div class="detail-item"><span class="detail-label">问题分类</span><span class="detail-value">{{ issue.categoryLabel }}</span></div>
-          <div class="detail-item"><span class="detail-label">所属部门</span><span class="detail-value">{{ issue.department }}</span></div>
-          <div class="detail-item"><span class="detail-label">负责人（主办）</span><span class="detail-value">{{ issue.responsible }}</span></div>
-          <div class="detail-item"><span class="detail-label">当前处理人</span><span class="detail-value">{{ issue.handler || '—' }}</span></div>
+          <div class="detail-item">
+            <span class="detail-label">问题分类</span>
+            <span class="detail-value">
+              <el-select v-if="isDraft" v-model="issue.category" size="small" style="width: 200px;" @change="onCategoryChange">
+                <el-option v-for="c in issueCategories" :key="c.value" :label="c.label" :value="c.value" />
+              </el-select>
+              <template v-else>{{ issue.categoryLabel }}</template>
+            </span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">所属部门</span>
+            <span class="detail-value">
+              <el-select v-if="isDraft" v-model="issue.department" size="small" style="width: 200px;" placeholder="选择部门">
+                <el-option v-for="d in deptList" :key="d.value" :label="d.label" :value="d.label" />
+              </el-select>
+              <template v-else>{{ issue.department }}</template>
+            </span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">负责人（主办）</span>
+            <span class="detail-value">
+              <el-input v-if="isDraft" v-model="issue.responsible" size="small" style="width: 200px;" placeholder="请输入主办人" />
+              <template v-else>{{ issue.responsible }}</template>
+            </span>
+          </div>
+          <div class="detail-item" v-if="!isDraft"><span class="detail-label">当前处理人</span><span class="detail-value">{{ issue.handler || '—' }}</span></div>
+          <div class="detail-item" v-if="isDraft">
+            <span class="detail-label">问题标题</span>
+            <span class="detail-value">
+              <el-input v-model="issue.title" size="small" style="width: 320px;" placeholder="请输入问题标题" />
+            </span>
+          </div>
         </el-col>
         <el-col :span="12">
           <div class="detail-item"><span class="detail-label">当前状态</span><span class="detail-value"><span :class="'status-tag status-' + issue.status">{{ issue.statusLabel }}</span></span></div>
           <div class="detail-item"><span class="detail-label">流程节点</span><span class="detail-value">{{ issue.flowNodeLabel }}</span></div>
-          <div class="detail-item"><span class="detail-label">调研日期</span><span class="detail-value">{{ issue.surveyDate }}</span></div>
-          <div class="detail-item"><span class="detail-label">调研地点</span><span class="detail-value">{{ issue.surveyLocation }}</span></div>
+          <div class="detail-item">
+            <span class="detail-label">调研日期</span>
+            <span class="detail-value">
+              <el-date-picker v-if="isDraft" v-model="issue.surveyDate" type="date" value-format="YYYY-MM-DD" size="small" style="width: 200px;" />
+              <template v-else>{{ issue.surveyDate }}</template>
+            </span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">调研地点</span>
+            <span class="detail-value">
+              <el-input v-if="isDraft" v-model="issue.surveyLocation" size="small" style="width: 200px;" placeholder="请输入调研地点" />
+              <template v-else>{{ issue.surveyLocation }}</template>
+            </span>
+          </div>
           <div class="detail-item">
             <span class="detail-label">截止日期</span>
-            <span class="detail-value" :style="{ color: isDeadlineNear ? '#F5222D' : '' }">
-              {{ issue.deadline }}
-              <span v-if="issue.delayedDeadline" style="color: #E6A23C; margin-left: 8px;">
-                (已延期至 {{ issue.delayedDeadline }})
-              </span>
+            <span class="detail-value" :style="{ color: !isDraft && isDeadlineNear ? '#F5222D' : '' }">
+              <el-date-picker v-if="isDraft" v-model="issue.deadline" type="date" value-format="YYYY-MM-DD" size="small" style="width: 200px;" />
+              <template v-else>
+                {{ issue.deadline }}
+                <span v-if="issue.delayedDeadline" style="color: #E6A23C; margin-left: 8px;">
+                  (已延期至 {{ issue.delayedDeadline }})
+                </span>
+              </template>
+            </span>
+          </div>
+          <div class="detail-item" v-if="isDraft">
+            <span class="detail-label">调研领导</span>
+            <span class="detail-value">
+              <el-input v-model="issue.leader" size="small" style="width: 200px;" placeholder="请输入调研领导" />
             </span>
           </div>
         </el-col>
       </el-row>
-      <div class="detail-item" style="margin-top: 4px;">
+      <div class="detail-item" v-if="isDraft" style="margin-top: 4px; align-items: flex-start;">
+        <span class="detail-label">问题描述</span>
+        <span class="detail-value" style="flex: 1;">
+          <el-input
+            v-model="issue.description"
+            type="textarea"
+            :rows="3"
+            placeholder="请补充问题背景与具体描述"
+            style="max-width: 720px;"
+          />
+        </span>
+      </div>
+      <div class="detail-item" v-if="!isDraft" style="margin-top: 4px;">
         <span class="detail-label">进度</span>
         <span class="detail-value"><el-progress :percentage="issue.progress" :stroke-width="10" style="width: 400px;" /></span>
       </div>
-      <div class="detail-item" v-if="issue.replyContent">
+      <div class="detail-item" v-if="!isDraft && issue.replyContent">
         <span class="detail-label">答复内容</span>
         <span class="detail-value">{{ issue.replyContent }}</span>
       </div>
-      <div class="detail-item" v-if="issue.satisfaction > 0">
+      <div class="detail-item" v-if="!isDraft && issue.satisfaction > 0">
         <span class="detail-label">满意度</span>
         <span class="detail-value"><el-rate v-model="issue.satisfaction" disabled /></span>
       </div>
-      <div class="detail-item" v-if="issue.supervised">
+      <div class="detail-item" v-if="!isDraft && issue.supervised">
         <span class="detail-label">督办状态</span>
         <span class="detail-value supervise-badge"><el-icon><Warning /></el-icon> 已被督办</span>
       </div>
     </div>
 
     <!-- 问题清单（即子问题；二级办理时可维护协同与进展） -->
-    <div class="form-card issue-list-merged" v-if="mergedIssueRows.length > 0">
+    <div class="form-card issue-list-merged" v-if="!isDraft && mergedIssueRows.length > 0">
       <div class="issue-list-header">
         <div class="issue-list-header-text">
           <div class="form-section-title" style="margin-bottom: 6px;">问题清单</div>
@@ -202,7 +248,7 @@
             <el-progress :percentage="row.progress" :stroke-width="6" :show-text="true" style="width: 110px;" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" :width="isLevel2Process ? 168 : 100" align="center" fixed="right">
+        <el-table-column label="操作" :width="actionColumnWidth" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openSubProgressDialog(row)">更新记录</el-button>
             <el-button
@@ -212,13 +258,37 @@
               size="small"
               @click="openSubIssueProgressDialog(row)"
             >进展更新</el-button>
+            <el-button
+              v-if="canShowCorrectionFeedback"
+              type="warning"
+              link
+              size="small"
+              @click="openCorrectionDialog(row)"
+            >纠错反馈</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <!-- 底部：路由与提交办理（未办结） -->
-    <div class="form-card" v-if="issue.status !== 'completed' && flowSubmitConfig.routes.length > 0">
+    <!-- 草稿操作（仅草稿状态） -->
+    <div class="form-card" v-if="isDraft">
+      <div class="form-section-title">草稿操作</div>
+      <p style="font-size: 12px; color: #999; margin: 0 0 14px;">
+        当前为草稿状态，可继续编辑信息后<strong style="color: #333;">保存草稿</strong>，或确认无误后<strong style="color: #333;">提交办理</strong>进入流程。
+      </p>
+      <div style="display: flex; justify-content: center; gap: 12px; padding: 8px 0 2px;">
+        <el-button size="large" @click="$router.back()" style="min-width: 140px;">取消</el-button>
+        <el-button size="large" @click="saveDraft" style="min-width: 160px;">
+          <el-icon><DocumentChecked /></el-icon> 保存草稿
+        </el-button>
+        <el-button type="primary" size="large" @click="submitDraftForFlow" style="min-width: 200px;">
+          <el-icon><Promotion /></el-icon> 提交办理
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 底部：路由与提交办理（未办结，非草稿） -->
+    <div class="form-card" v-if="!isDraft && issue.status !== 'completed' && flowSubmitConfig.routes.length > 0">
       <div class="form-section-title">提交办理</div>
       <p style="font-size: 12px; color: #999; margin: 0 0 12px;">
         当前环节：<strong style="color: #333;">{{ issue.flowNodeLabel }}</strong>
@@ -234,9 +304,32 @@
             :value="r.value"
             style="display: flex; margin-bottom: 6px; align-items: flex-start; white-space: normal; height: auto;"
           >
-            {{ r.label }}
+            <span>{{ r.label }}</span>
+            <span v-if="getRouteAssigneeInfo(r)" style="color: #999; font-size: 12px; margin-left: 8px;">
+              （处理人：{{ getRouteAssigneeInfo(r).name }} · {{ getRouteAssigneeInfo(r).dept }}）
+            </span>
           </el-radio>
         </el-radio-group>
+      </div>
+      <div v-if="selectedRouteAssignee" class="route-assignee-card">
+        <div class="route-assignee-card__header">
+          <el-icon><User /></el-icon>
+          <span>下一步处理人</span>
+        </div>
+        <div class="route-assignee-card__body">
+          <div class="route-assignee-item">
+            <span class="route-assignee-label">姓名</span>
+            <span class="route-assignee-value">{{ selectedRouteAssignee.name }}</span>
+          </div>
+          <div class="route-assignee-item">
+            <span class="route-assignee-label">部门</span>
+            <span class="route-assignee-value">{{ selectedRouteAssignee.dept }}</span>
+          </div>
+          <div class="route-assignee-item">
+            <span class="route-assignee-label">目标环节</span>
+            <span class="route-assignee-value">{{ getFlowNodeLabel(selectedRoute?.targetNode) }}</span>
+          </div>
+        </div>
       </div>
       <div v-if="isLevel2Process && hasSubIssues && !allCollaboratorsUpdated" style="margin-bottom: 12px; background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; gap: 8px;">
         <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
@@ -295,7 +388,17 @@
       title="纠错反馈"
       width="520px"
       :close-on-click-modal="false"
+      @closed="correctionTargetRow = null"
     >
+      <div
+        v-if="correctionTargetRow"
+        style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;"
+      >
+        <div style="font-size: 13px; color: #333; font-weight: 600;">{{ correctionTargetRow.title }}</div>
+        <div style="font-size: 12px; color: #999; margin-top: 4px;">
+          {{ correctionTargetRow.subId }} | 主单 {{ issue.id }}
+        </div>
+      </div>
       <div style="background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 12px; color: #ad6800;">
         当前反馈处理人：{{ issue?.responsible || '发起人' }}（发起人）
       </div>
@@ -352,6 +455,10 @@
       <div v-if="selectedRoute" style="background: #f6f8fa; padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; color: #333;">
         <div><strong>所选路由：</strong>{{ selectedRoute.label }}</div>
         <div style="margin-top: 6px; color: #666;">目标环节：{{ getFlowNodeLabel(selectedRoute.targetNode) }}</div>
+        <div v-if="selectedRouteAssignee" style="margin-top: 6px; color: #666;">
+          下一步处理人：<strong style="color: #333;">{{ selectedRouteAssignee.name }}</strong>
+          <span style="margin-left: 6px; color: #999;">（{{ selectedRouteAssignee.dept }}）</span>
+        </div>
       </div>
       <el-form label-width="80px" size="default">
         <el-form-item label="办理意见">
@@ -473,23 +580,26 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ArrowLeft, EditPen, Upload, Warning, Plus, CircleCheck, WarningFilled, List, Share } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowLeft, Upload, Warning, Plus, CircleCheck, WarningFilled, List, Share, User, DocumentChecked, Promotion } from '@element-plus/icons-vue'
 import {
   mockIssues,
   progressLogs,
   subProgressLogs,
   departments,
+  issueCategories,
   issueFlowSequence,
   getIssueFlowSubmitConfig,
   getIssueFlowNodeIndex,
+  getRouteAssignee,
   flowRecords,
   getFlowNodeLabel,
   currentUser,
 } from '../mock/data'
 
 const route = useRoute()
+const router = useRouter()
 const issueId = route.params.id
 const deptList = departments
 
@@ -501,10 +611,87 @@ if (found) {
 
 const hasSubIssues = computed(() => issue.value?.subIssues?.length > 0)
 
+/** 草稿状态：可编辑基本信息并保存/提交办理 */
+const isDraft = computed(() => issue.value?.status === 'draft')
+
 /** 当前为二级办理且未办结时，可维护子问题协同与进展 */
 const isLevel2Process = computed(
   () => issue.value?.flowNode === 'level2' && issue.value?.status !== 'completed',
 )
+
+function onCategoryChange(value) {
+  if (!issue.value) return
+  const cat = issueCategories.find(c => c.value === value)
+  issue.value.categoryLabel = cat ? cat.label : value
+}
+
+function validateDraftForSubmit() {
+  if (!issue.value) return false
+  const required = [
+    { field: 'title', label: '问题标题' },
+    { field: 'category', label: '问题分类' },
+    { field: 'department', label: '所属部门' },
+    { field: 'responsible', label: '负责人（主办）' },
+    { field: 'surveyDate', label: '调研日期' },
+    { field: 'surveyLocation', label: '调研地点' },
+    { field: 'deadline', label: '截止日期' },
+  ]
+  for (const r of required) {
+    if (!issue.value[r.field]) {
+      ElMessage.warning(`请填写「${r.label}」`)
+      return false
+    }
+  }
+  return true
+}
+
+function saveDraft() {
+  if (!issue.value) return
+  if (!issue.value.title) {
+    ElMessage.warning('请至少填写问题标题')
+    return
+  }
+  issue.value.updateDate = new Date().toISOString().split('T')[0]
+  const idx = mockIssues.findIndex(i => i.id === issue.value.id)
+  if (idx !== -1) {
+    mockIssues[idx] = JSON.parse(JSON.stringify(issue.value))
+  }
+  ElMessage.success('草稿已保存')
+}
+
+async function submitDraftForFlow() {
+  if (!validateDraftForSubmit()) return
+  try {
+    await ElMessageBox.confirm(
+      '提交后将进入「地市问题确认」环节，且不可再编辑基本信息，是否确认提交？',
+      '确认提交办理',
+      { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+
+  issue.value.status = 'pending'
+  issue.value.statusLabel = '待处理'
+  issue.value.flowNode = 'city_confirm'
+  issue.value.flowNodeLabel = getFlowNodeLabel('city_confirm')
+  issue.value.updateDate = new Date().toISOString().split('T')[0]
+
+  localFlowRecordAdds.value.unshift({
+    id: `submit-${Date.now()}`,
+    date: new Date().toLocaleString('zh-CN', { hour12: false }),
+    user: currentUser.name,
+    action: '草稿提交办理',
+    remark: `已由草稿提交至「${issue.value.flowNodeLabel}」环节`,
+  })
+
+  const idx = mockIssues.findIndex(i => i.id === issue.value.id)
+  if (idx !== -1) {
+    mockIssues[idx] = JSON.parse(JSON.stringify(issue.value))
+  }
+  ElMessage.success('草稿已提交办理')
+  router.push('/issues')
+}
 
 /** 问题清单行：有 subIssues 则一行一条；否则用工单主信息合成一行 */
 const mergedIssueRows = computed(() => {
@@ -587,6 +774,13 @@ const canShowCorrectionFeedback = computed(
     correctionFeedbackNodes.includes(issue.value.flowNode),
 )
 
+const actionColumnWidth = computed(() => {
+  let width = 100
+  if (isLevel2Process.value) width += 76
+  if (canShowCorrectionFeedback.value) width += 84
+  return width
+})
+
 const selectedRouteValue = ref('')
 watch(
   () => [issue.value?.flowNode, flowSubmitConfig.value.routes],
@@ -610,6 +804,13 @@ watch(
 const selectedRoute = computed(() =>
   flowSubmitConfig.value.routes.find((r) => r.value === selectedRouteValue.value),
 )
+
+function getRouteAssigneeInfo(route) {
+  if (!route || !issue.value) return null
+  return getRouteAssignee(issue.value, route.targetNode)
+}
+
+const selectedRouteAssignee = computed(() => getRouteAssigneeInfo(selectedRoute.value))
 
 const canSubmitFlowStep = computed(() => {
   if (!selectedRoute.value) return false
@@ -647,7 +848,9 @@ function openSubmitFlowDialog() {
   submitFlowDialogVisible.value = true
 }
 
-function openCorrectionDialog() {
+const correctionTargetRow = ref(null)
+function openCorrectionDialog(row = null) {
+  correctionTargetRow.value = row || null
   correctionForm.value = { content: '' }
   correctionDialogVisible.value = true
 }
@@ -658,15 +861,19 @@ function submitCorrectionFeedback() {
     ElMessage.warning('请输入反馈信息')
     return
   }
+  const target = correctionTargetRow.value
+  const targetLabel = target?.subId ? `子问题 ${target.subId}` : ''
+  const remarkPrefix = targetLabel ? `[${targetLabel}] ` : ''
   localFlowRecordAdds.value.unshift({
     id: `corr-${Date.now()}`,
     date: new Date().toLocaleString('zh-CN', { hour12: false }),
     user: currentUser.name,
     action: '纠错反馈',
-    remark: `反馈给发起人（${issue.value?.responsible || '未设置'}）：${content}`,
+    remark: `${remarkPrefix}反馈给发起人（${issue.value?.responsible || '未设置'}）：${content}`,
   })
   ElMessage.success(`纠错反馈已提交，处理人：${issue.value?.responsible || '发起人'}`)
   correctionDialogVisible.value = false
+  correctionTargetRow.value = null
 }
 
 function confirmSubmitFlow() {
@@ -1067,5 +1274,41 @@ function submitCollaboratorUpdate() {
   background: #fffbe6;
   border: 1px solid #ffe58f;
   color: #d48806;
+}
+.route-assignee-card {
+  margin-bottom: 12px;
+  border: 1px solid #d6e4ff;
+  background: #f0f5ff;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.route-assignee-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #e6efff;
+  color: #1d39c4;
+  font-size: 13px;
+  font-weight: 600;
+}
+.route-assignee-card__body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 10px 14px 12px;
+}
+.route-assignee-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.route-assignee-label {
+  color: #8c8c8c;
+}
+.route-assignee-value {
+  color: #1f1f1f;
+  font-weight: 600;
 }
 </style>

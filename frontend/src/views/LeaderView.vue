@@ -52,15 +52,12 @@
       <el-select v-model="filterCategory" placeholder="问题分类" size="default" clearable style="width: 120px;">
         <el-option v-for="c in categories" :key="c.value" :label="c.label" :value="c.value" />
       </el-select>
-      <el-cascader
-        v-model="filterOrg"
-        :options="orgOptions"
-        :props="{ checkStrictly: true, expandTrigger: 'hover' }"
-        placeholder="组织筛选"
-        size="default"
-        clearable
-        style="width: 200px;"
-      />
+      <el-select v-model="filterMainDept" placeholder="答复部门" size="default" clearable filterable style="width: 160px;">
+        <el-option v-for="d in deptOptions" :key="d.value" :label="d.label" :value="d.label" />
+      </el-select>
+      <el-select v-model="filterAssistDept" placeholder="配合部门" size="default" clearable filterable style="width: 160px;">
+        <el-option v-for="d in deptOptions" :key="d.value" :label="d.label" :value="d.label" />
+      </el-select>
       <div style="flex: 1;"></div>
       <el-button type="warning" size="default" @click="showAISummary = true">
         <el-icon><MagicStick /></el-icon> AI总结
@@ -68,16 +65,6 @@
       <el-button size="default" @click="handleExport">
         <el-icon><Download /></el-icon> 导出
       </el-button>
-    </div>
-
-    <!-- 分部门查看入口 -->
-    <div class="filter-bar" style="gap: 8px; padding: 8px 16px;">
-      <span style="font-size: 12px; color: #999; margin-right: 4px;">分部门查看：</span>
-      <el-button v-for="dept in topDepts" :key="dept"
-        :type="filterDeptQuick === dept ? 'primary' : ''"
-        size="small" round
-        @click="filterDeptQuick = filterDeptQuick === dept ? '' : dept"
-      >{{ dept }}</el-button>
     </div>
 
     <!-- ========== 按明细问题视图 ========== -->
@@ -241,56 +228,80 @@
       </template>
     </el-dialog>
 
-    <!-- ========== 督办单视图 ========== -->
+    <!-- ========== 督办单视图（卡片样式，与按调研批次一致） ========== -->
     <template v-if="viewMode === 'supervision'">
       <div class="table-card" style="padding: 16px;">
-        <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 14px; font-weight: 600; color: #333;">督办单列表</span>
-          <span style="font-size: 12px; color: #999;">共 {{ svOrders.length }} 条督办</span>
-        </div>
-        <div v-for="order in svOrders" :key="order.id" class="supervision-card">
-          <div class="sv-header">
-            <span class="sv-title">{{ order.issueTitle }}</span>
+        <div
+          v-for="order in filteredSvOrders"
+          :key="order.id"
+          class="batch-card sv-batch-card"
+          @click="expandSv = expandSv === order.id ? '' : order.id"
+        >
+          <div class="batch-header">
+            <span class="batch-title">
+              <el-icon style="color: #F56C6C; margin-right: 6px; vertical-align: -2px;"><Warning /></el-icon>
+              {{ order.issueTitle }}
+            </span>
             <el-tag type="danger" size="small">{{ order.statusLabel }}</el-tag>
           </div>
-          <div class="sv-meta">
-            <span>督办编号：{{ order.id }}</span>
-            <span>关联问题：{{ order.issueId }}</span>
+          <div class="batch-meta">
             <span>督办领导：{{ order.leader }}</span>
             <span>目标部门：{{ order.targetDept }}</span>
-          </div>
-          <div class="sv-meta">
-            <span>发起日期：{{ order.createDate }}</span>
-            <span>要求完成：{{ order.deadline }}</span>
+            <span>时间：{{ order.createDate }} ~ {{ order.deadline }}</span>
             <span>当前节点：{{ order.flowNodeLabel }}</span>
           </div>
-          <div class="sv-reason">
-            <b>督办原因：</b>{{ order.reason }}
+          <div class="batch-progress">
+            <el-progress
+              :percentage="getSvProgress(order.flowNode)"
+              :stroke-width="8"
+              :status="getSvProgress(order.flowNode) === 100 ? 'success' : undefined"
+              style="flex: 1;"
+            />
           </div>
-          <!-- 督办流程图 -->
-          <div style="margin-top: 12px;">
-            <div style="font-size: 12px; color: #999; margin-bottom: 8px;">督办流程：领导 → 对应部门主任 → 一级办理 → 二级办理 → 接单部门主任 → 领导</div>
-            <div class="flow-chart-container" style="padding: 8px 0;">
-              <div v-for="(node, idx) in svFlowNodes" :key="node.value" class="flow-node-wrapper">
-                <div :class="['flow-node-circle', getSvNodeStatus(node.value, order.flowNode)]" style="width: 26px; height: 26px;">
-                  <span class="flow-node-idx" style="font-size: 10px;">{{ idx + 1 }}</span>
-                </div>
-                <div class="flow-node-label" :style="{ fontSize: '10px' }">{{ node.label }}</div>
-                <div v-if="idx < svFlowNodes.length - 1" :class="['flow-node-line', { done: isSvNodeDone(node.value, order.flowNode) }]" style="top: 13px;"></div>
-              </div>
+          <!-- 展开显示督办详情 -->
+          <div
+            v-if="expandSv === order.id"
+            style="margin-top: 12px; border-top: 1px solid #f0f0f0; padding-top: 12px;"
+            @click.stop
+          >
+            <div class="sv-meta-line">
+              <span>督办编号：{{ order.id }}</span>
+              <span>关联问题：{{ order.issueId }}</span>
             </div>
-          </div>
-          <!-- 督办记录 -->
-          <div style="margin-top: 10px; border-top: 1px solid #f5f5f5; padding-top: 10px;">
-            <div style="font-size: 12px; font-weight: 600; color: #666; margin-bottom: 6px;">处理记录</div>
-            <div v-for="(log, idx) in order.logs" :key="idx" style="display: flex; gap: 8px; font-size: 12px; color: #666; margin-bottom: 4px;">
-              <span style="color: #999; min-width: 130px;">{{ log.date }}</span>
-              <span style="font-weight: 500; min-width: 50px;">{{ log.user }}</span>
-              <span>{{ log.content }}</span>
+            <div class="sv-reason">
+              <b>督办原因：</b>{{ order.reason }}
+            </div>
+            <div style="margin-top: 12px;">
+              <el-table
+                :data="getBatchIssues([order.issueId])"
+                size="small"
+                class="compact-table"
+                :header-cell-style="{ background: '#fafafa', color: '#333', fontWeight: 600, padding: '6px 0' }"
+              >
+                <el-table-column prop="title" label="问题名称" min-width="220" show-overflow-tooltip />
+                <el-table-column prop="categoryLabel" label="分类" width="100" />
+                <el-table-column prop="department" label="答复部门" width="100" />
+                <el-table-column label="状态" width="80">
+                  <template #default="{ row }">
+                    <span :class="'status-tag status-' + row.status">{{ row.statusLabel }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="进度" width="100">
+                  <template #default="{ row }">
+                    <el-progress :percentage="row.progress" :stroke-width="6" style="width: 80px;" />
+                  </template>
+                </el-table-column>
+                <el-table-column prop="responsible" label="负责人" width="70" />
+                <el-table-column label="操作" width="80">
+                  <template #default="{ row }">
+                    <el-button type="primary" link size="small">详情</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
             </div>
           </div>
         </div>
-        <el-empty v-if="svOrders.length === 0" description="暂无督办单" />
+        <el-empty v-if="filteredSvOrders.length === 0" description="暂无督办单" />
       </div>
     </template>
 
@@ -328,33 +339,29 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Download, MagicStick } from '@element-plus/icons-vue'
+import { Search, Download, MagicStick, Warning } from '@element-plus/icons-vue'
 import {
   mockIssues, issueCategories, departments, flowNodes,
-  supervisionOrders as svOrdersData, surveyBatches, organizations
+  supervisionOrders as svOrdersData, surveyBatches
 } from '../mock/data'
 
 const viewMode = ref('detail')
 const searchText = ref('')
 const filterCategory = ref('')
-const filterOrg = ref([])
-const filterDeptQuick = ref('')
+const filterMainDept = ref('')
+const filterAssistDept = ref('')
 
-const orgOptions = organizations.map(org => ({
-  value: org.value,
-  label: org.label,
-  children: org.children?.map(c => ({ value: c.value, label: c.label })),
-}))
+const deptOptions = departments
 const dateRange = ref(null)
 const showAISummary = ref(false)
 const aiDateRange = ref(null)
 const aiCategory = ref('')
 const aiResult = ref(false)
 const expandBatch = ref('')
+const expandSv = ref('')
 
 const categories = issueCategories
 const svOrders = ref(svOrdersData)
-const topDepts = ['网络运维部', '信息技术部', '客户服务部', '市场经营部', '战略发展部', '安全保卫部', '人力资源部', '行政后勤部']
 
 // 督办弹窗状态
 const superviseDialogVisible = ref(false)
@@ -384,6 +391,13 @@ function isSvNodeDone(nodeValue, currentNode) {
   return svNodeOrder.indexOf(nodeValue) < svNodeOrder.indexOf(currentNode)
 }
 
+/** 督办进度：根据当前所处流程节点在 svNodeOrder 中的位置推算百分比 */
+function getSvProgress(currentNode) {
+  const idx = svNodeOrder.indexOf(currentNode)
+  if (idx < 0) return 0
+  return Math.round(((idx + 1) / svNodeOrder.length) * 100)
+}
+
 const allIssues = computed(() => [...mockIssues].sort((a, b) => b.updateDate.localeCompare(a.updateDate)))
 const inProgressIssues = computed(() => allIssues.value.filter(i => i.status === 'in_progress'))
 const completedRate = computed(() => {
@@ -392,19 +406,23 @@ const completedRate = computed(() => {
   return total ? Math.round(completed / total * 100) : 0
 })
 
+/** 收集一条问题的「配合部门」集合：来源于各子问题的 assistDepts */
+function getIssueAssistDepts(issue) {
+  const set = new Set()
+  issue.subIssues?.forEach(sub => {
+    sub.assistDepts?.forEach(d => set.add(d))
+  })
+  return set
+}
+
 const filteredIssues = computed(() => {
   let list = allIssues.value
   if (searchText.value) list = list.filter(i => i.title.includes(searchText.value))
   if (filterCategory.value) list = list.filter(i => i.category === filterCategory.value)
-  if (filterOrg.value && filterOrg.value.length > 0) {
-    const orgVal = filterOrg.value
-    if (orgVal.length === 2) {
-      const org = organizations.find(o => o.value === orgVal[0])
-      const dept = org?.children?.find(c => c.value === orgVal[1])
-      if (dept) list = list.filter(i => i.department === dept.label)
-    }
+  if (filterMainDept.value) list = list.filter(i => i.department === filterMainDept.value)
+  if (filterAssistDept.value) {
+    list = list.filter(i => getIssueAssistDepts(i).has(filterAssistDept.value))
   }
-  if (filterDeptQuick.value) list = list.filter(i => i.department === filterDeptQuick.value)
   return list
 })
 
@@ -412,6 +430,23 @@ const filteredBatches = computed(() => {
   let list = [...surveyBatches]
   if (searchText.value) list = list.filter(b => b.name.includes(searchText.value) || b.location.includes(searchText.value))
   return list.sort((a, b) => b.startDate.localeCompare(a.startDate))
+})
+
+const filteredSvOrders = computed(() => {
+  let list = [...svOrders.value]
+  if (searchText.value) {
+    const kw = searchText.value
+    list = list.filter(o =>
+      o.issueTitle?.includes(kw) ||
+      o.leader?.includes(kw) ||
+      o.targetDept?.includes(kw) ||
+      o.reason?.includes(kw),
+    )
+  }
+  if (filterMainDept.value) {
+    list = list.filter(o => o.targetDept === filterMainDept.value)
+  }
+  return list.sort((a, b) => String(b.createDate).localeCompare(String(a.createDate)))
 })
 
 function getBatchIssues(issueIds) {

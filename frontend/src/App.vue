@@ -14,7 +14,12 @@
       >
         <el-menu-item index="/dashboard">
           <el-icon><DataAnalysis /></el-icon>
-          <span>工作台</span>
+          <span class="menu-item-label">
+            <span class="menu-item-text">工作台</span>
+            <span v-if="personalTodoCount > 0" class="menu-todo-count">
+              {{ personalTodoCount > 99 ? '99+' : personalTodoCount }}
+            </span>
+          </span>
         </el-menu-item>
         <el-menu-item index="/issues">
           <el-icon><Document /></el-icon>
@@ -35,20 +40,9 @@
       <header class="top-header">
         <span class="page-title">{{ currentPageTitle }}</span>
         <div class="header-actions">
-          <el-input
-            v-model="globalSearch"
-            placeholder="搜索问题..."
-            :prefix-icon="Search"
-            style="width: 220px"
-            size="default"
-            clearable
-          />
-          <el-badge :value="3" :max="99">
-            <el-button :icon="Bell" circle size="default" />
-          </el-badge>
           <el-dropdown>
             <el-button type="primary" size="default">
-              段磊 <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+              {{ currentUser.name }} <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </el-button>
             <template #dropdown>
               <el-dropdown-menu>
@@ -67,13 +61,82 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Search, Bell, ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown } from '@element-plus/icons-vue'
+import {
+  mockIssues,
+  planTodos,
+  supervisionOrders,
+  issueOrganizes,
+  issueCorrectionTodos,
+  currentUser,
+} from './mock/data'
 
 const route = useRoute()
-const globalSearch = ref('')
 
 const activeMenu = computed(() => route.path)
 const currentPageTitle = computed(() => route.meta?.title || '工作台')
+
+/** 当前用户的待办数量（与工作台「待办」一致） */
+const personalTodoCount = computed(() => {
+  const seen = new Set()
+  let count = 0
+  const activeStatuses = ['pending', 'in_progress', 'overdue']
+
+  planTodos
+    .filter(t => t.department === currentUser.department && t.status === 'pending')
+    .forEach(t => {
+      if (!seen.has(t.id)) {
+        seen.add(t.id)
+        count += 1
+      }
+    })
+
+  mockIssues.forEach(issue => {
+    const isParentResponsible = issue.responsible === currentUser.name
+    if (isParentResponsible && activeStatuses.includes(issue.status) && !seen.has(issue.id)) {
+      seen.add(issue.id)
+      count += 1
+    }
+    issue.subIssues?.forEach(sub => {
+      if (isParentResponsible) return
+      const isHandler = sub.handler?.includes(currentUser.name)
+      const needUpdate = sub.collaborators?.some(c => c.name === currentUser.name && !c.hasUpdated)
+      if ((isHandler || needUpdate) && activeStatuses.includes(sub.status) && !seen.has(sub.id)) {
+        seen.add(sub.id)
+        count += 1
+      }
+    })
+  })
+
+  supervisionOrders
+    .filter(o => o.targetDept === currentUser.department && o.status !== 'completed')
+    .forEach(o => {
+      if (!seen.has(o.id)) {
+        seen.add(o.id)
+        count += 1
+      }
+    })
+
+  issueOrganizes
+    .filter(item => item.department === currentUser.department && item.status === 'pending')
+    .forEach(item => {
+      if (!seen.has(item.id)) {
+        seen.add(item.id)
+        count += 1
+      }
+    })
+
+  issueCorrectionTodos
+    .filter(item => item.handler === currentUser.name && ['pending', 'in_progress', 'overdue'].includes(item.status))
+    .forEach(item => {
+      if (!seen.has(item.id)) {
+        seen.add(item.id)
+        count += 1
+      }
+    })
+
+  return count
+})
 </script>
