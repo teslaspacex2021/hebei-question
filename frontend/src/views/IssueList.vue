@@ -39,15 +39,6 @@
         </div>
       </div>
       <div class="stat-card" style="cursor: pointer;">
-        <div class="stat-icon" style="background: #FFF1F0; color: #F5222D;">
-          <el-icon :size="22"><WarningFilled /></el-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value" style="color: #F5222D;">{{ overdueCount }}</div>
-          <div class="stat-label">已超期</div>
-        </div>
-      </div>
-      <div class="stat-card" style="cursor: pointer;">
         <div class="stat-icon" style="background: #F0E6FF; color: #722ED1;">
           <el-icon :size="22"><StarFilled /></el-icon>
         </div>
@@ -61,6 +52,18 @@
     <!-- 搜索和操作栏 -->
     <div class="filter-bar">
       <el-input v-model="searchText" placeholder="输入标题关键字" :prefix-icon="Search" style="width: 220px;" size="default" clearable />
+      <el-select
+        v-model="activeTab"
+        placeholder="状态筛选"
+        size="default"
+        style="width: 140px; margin-left: 8px;"
+      >
+        <el-option label="全部状态" value="all" />
+        <el-option label="草稿" value="draft" />
+        <el-option label="待处理" value="pending" />
+        <el-option label="解决中" value="in_progress" />
+        <el-option label="已结束" value="completed" />
+      </el-select>
       <div style="flex: 1;"></div>
       <span style="font-size: 12px; color: #999; margin-right: 8px;">排序：更新日期-升序</span>
       <el-button size="default" :icon="Filter">筛选</el-button>
@@ -156,11 +159,6 @@
         </el-table-column>
         <el-table-column prop="responsible" label="负责人" width="70" />
         <el-table-column prop="handler" label="当前处理人" width="90" show-overflow-tooltip />
-        <el-table-column prop="deadline" label="截止日期" width="100">
-          <template #default="{ row }">
-            <span :style="{ color: isDeadlineNear(row) ? '#F5222D' : '#333' }">{{ row.deadline }}</span>
-          </template>
-        </el-table-column>
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <div class="action-btns" style="gap: 2px; flex-wrap: nowrap;">
@@ -311,7 +309,9 @@ const progressForm = ref({
 
 const filteredIssues = computed(() => {
   let list = [...listRows.value]
-  if (activeTab.value === 'pending') {
+  if (activeTab.value === 'draft') {
+    list = list.filter(i => i.status === 'draft' || i.isDraft)
+  } else if (activeTab.value === 'pending') {
     list = list.filter(i => i.status === 'pending')
   } else if (activeTab.value === 'in_progress') {
     list = list.filter(i => i.status === 'in_progress')
@@ -334,7 +334,6 @@ const totalCount = computed(() => localIssues.value.length)
 const pendingAcceptCount = computed(() => localIssues.value.filter(i => i.status === 'pending').length)
 const inProgressCount = computed(() => localIssues.value.filter(i => i.status === 'in_progress').length)
 const completedCount = computed(() => localIssues.value.filter(i => i.status === 'completed').length)
-const overdueCount = computed(() => localIssues.value.filter(i => i.status === 'overdue').length)
 const supervisedCount = computed(() => localIssues.value.filter(i => i.supervised).length)
 const avgSatisfaction = computed(() => {
   const rated = localIssues.value.filter(i => i.satisfaction > 0)
@@ -349,12 +348,6 @@ function getFlowColor(node) {
 
 function isOverdue(row) {
   return row.status !== 'completed' && new Date(row.deadline) < new Date()
-}
-
-function isDeadlineNear(row) {
-  if (row.status === 'completed') return false
-  const diff = new Date(row.deadline) - new Date()
-  return diff < 7 * 24 * 60 * 60 * 1000 && diff > 0
 }
 
 function showDetail(row) {

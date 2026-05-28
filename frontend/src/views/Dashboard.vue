@@ -39,15 +39,6 @@
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon" style="background: #FFF1F0; color: #F5222D;">
-          <el-icon :size="22"><WarningFilled /></el-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value" style="color: #F5222D;">{{ overdueCount }}</div>
-          <div class="stat-label">已超期</div>
-        </div>
-      </div>
-      <div class="stat-card">
         <div class="stat-icon" style="background: #F0E6FF; color: #722ED1;">
           <el-icon :size="22"><StarFilled /></el-icon>
         </div>
@@ -209,7 +200,6 @@ const totalIssues = computed(() => mockIssues.length)
 const pendingCount = computed(() => mockIssues.filter(i => i.status === 'pending').length)
 const inProgressCount = computed(() => mockIssues.filter(i => i.status === 'in_progress').length)
 const completedCount = computed(() => mockIssues.filter(i => i.status === 'completed').length)
-const overdueCount = computed(() => mockIssues.filter(i => i.status === 'overdue').length)
 const avgSatisfaction = computed(() => {
   const rated = mockIssues.filter(i => i.satisfaction > 0)
   if (rated.length === 0) return '—'
