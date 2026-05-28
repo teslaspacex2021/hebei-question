@@ -87,6 +87,10 @@
                 <span class="detail-label">问题编号：</span>
                 <span class="detail-value">{{ row.id }}</span>
               </div>
+              <div class="detail-item" v-if="row.parentId !== row.id">
+                <span class="detail-label">主单编号：</span>
+                <span class="detail-value">{{ row.parentId }}</span>
+              </div>
               <div class="detail-item">
                 <span class="detail-label">调研日期：</span>
                 <span class="detail-value">{{ row.surveyDate }}</span>
@@ -113,6 +117,13 @@
               <el-icon v-if="row.supervised" :size="14" style="color: #F56C6C;"><Warning /></el-icon>
               <span style="cursor: pointer; color: #333;">{{ row.title }}</span>
             </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="batchTitle" label="所属调研批次" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span :style="{ color: row.batchTitle && row.batchTitle !== '—' ? '#595959' : '#bfbfbf' }">
+              {{ row.batchTitle || '—' }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="流程节点" width="100">
@@ -228,7 +239,7 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Filter, Setting, Plus, MoreFilled, EditPen, Upload, Top } from '@element-plus/icons-vue'
-import { mockIssues, flowNodes, progressLogs } from '../mock/data'
+import { mockIssues, flowNodes, progressLogs, getBatchNameByIssueId } from '../mock/data'
 
 const router = useRouter()
 const activeTab = ref('all')
@@ -238,6 +249,59 @@ const pageSize = ref(20)
 const progressDialogVisible = ref(false)
 const localIssues = ref([...mockIssues])
 
+function flattenIssuesForList(issues) {
+  const rows = []
+  for (const issue of issues) {
+    const batchTitle = issue.batchTitle || getBatchNameByIssueId(issue.id) || '—'
+    const base = {
+      parentId: issue.id,
+      flowNode: issue.flowNode,
+      flowNodeLabel: issue.flowNodeLabel,
+      description: issue.description,
+      updateDate: issue.updateDate,
+      responsible: issue.responsible,
+      pinned: issue.pinned,
+      supervised: issue.supervised,
+      surveyDate: issue.surveyDate,
+      surveyLocation: issue.surveyLocation,
+      leader: issue.leader,
+      replyContent: issue.replyContent,
+      batchTitle,
+      department: issue.department,
+      isDraft: issue.status === 'draft',
+    }
+
+    if (issue.subIssues?.length) {
+      for (const sub of issue.subIssues) {
+        rows.push({
+          ...base,
+          id: sub.id,
+          title: sub.title,
+          progress: sub.progress,
+          status: sub.status,
+          statusLabel: sub.statusLabel,
+          handler: sub.handler,
+          deadline: sub.deadline,
+        })
+      }
+    } else {
+      rows.push({
+        ...base,
+        id: issue.id,
+        title: issue.title,
+        progress: issue.progress,
+        status: issue.status,
+        statusLabel: issue.statusLabel,
+        handler: issue.handler,
+        deadline: issue.deadline,
+      })
+    }
+  }
+  return rows
+}
+
+const listRows = computed(() => flattenIssuesForList(localIssues.value))
+
 // 进展更新表单
 const progressForm = ref({
   issue: null,
@@ -246,7 +310,7 @@ const progressForm = ref({
 })
 
 const filteredIssues = computed(() => {
-  let list = [...localIssues.value]
+  let list = [...listRows.value]
   if (activeTab.value === 'pending') {
     list = list.filter(i => i.status === 'pending')
   } else if (activeTab.value === 'in_progress') {
@@ -259,7 +323,6 @@ const filteredIssues = computed(() => {
   if (searchText.value) {
     list = list.filter(i => i.title.includes(searchText.value))
   }
-  // 置顶问题排在前面
   return list.sort((a, b) => {
     if (a.pinned && !b.pinned) return -1
     if (!a.pinned && b.pinned) return 1
@@ -295,7 +358,7 @@ function isDeadlineNear(row) {
 }
 
 function showDetail(row) {
-  router.push(`/issues/${row.id}`)
+  router.push(`/issues/${row.parentId}`)
 }
 
 function handleCommand(cmd, row) {
@@ -305,7 +368,7 @@ function handleCommand(cmd, row) {
     // 暂以详情页作为编辑入口
     showDetail(row)
   } else if (cmd === 'pin') {
-    const idx = localIssues.value.findIndex(i => i.id === row.id)
+    const idx = localIssues.value.findIndex(i => i.id === row.parentId)
     if (idx !== -1) {
       localIssues.value[idx] = { ...localIssues.value[idx], pinned: !localIssues.value[idx].pinned }
       ElMessage.success(localIssues.value[idx].pinned ? '已置顶' : '已取消置顶')
@@ -315,7 +378,7 @@ function handleCommand(cmd, row) {
       ElMessage.warning('仅草稿状态的问题可以删除')
       return
     }
-    const idx = localIssues.value.findIndex(i => i.id === row.id)
+    const idx = localIssues.value.findIndex(i => i.id === row.parentId)
     if (idx !== -1) {
       localIssues.value.splice(idx, 1)
       ElMessage.success(`已删除草稿问题「${row.title}」`)
@@ -337,12 +400,21 @@ function submitProgress() {
     ElMessage.warning('请输入进展描述')
     return
   }
-  const issue = progressForm.value.issue
-  const idx = localIssues.value.findIndex(i => i.id === issue.id)
+  const row = progressForm.value.issue
+  const idx = localIssues.value.findIndex(i => i.id === row.parentId)
   if (idx !== -1) {
+    const issue = localIssues.value[idx]
+    const subIdx = issue.subIssues?.findIndex(s => s.id === row.id)
+    if (subIdx != null && subIdx !== -1) {
+      issue.subIssues[subIdx] = {
+        ...issue.subIssues[subIdx],
+        progress: progressForm.value.progress,
+      }
+    } else {
+      issue.progress = progressForm.value.progress
+    }
     localIssues.value[idx] = {
-      ...localIssues.value[idx],
-      progress: progressForm.value.progress,
+      ...issue,
       updateDate: new Date().toISOString().split('T')[0],
     }
   }

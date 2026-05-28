@@ -41,7 +41,7 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="24">
-            <el-form-item label="调研批次标题">
+            <el-form-item label="调研批次标题" required>
               <el-input
                 v-model="form.batchTitle"
                 placeholder="例如：2026年1月张总石家庄调研"
@@ -215,6 +215,11 @@ function downloadTemplate() {
 }
 
 function handleSubmit() {
+  if (!form.batchTitle?.trim()) {
+    ElMessage.warning('请填写调研批次标题')
+    return
+  }
+
   const resolvedIssues = form.issues.filter(i => i.resolved)
   const unresolvedIssues = form.issues.filter(i => !i.resolved)
 

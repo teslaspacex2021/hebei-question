@@ -74,6 +74,13 @@
             </span>
           </div>
           <div class="detail-item">
+            <span class="detail-label">调研批次标题</span>
+            <span class="detail-value">
+              <el-input v-if="isDraft" v-model="issue.batchTitle" size="small" style="width: 320px;" placeholder="例如：2026年1月张总石家庄调研" />
+              <template v-else>{{ issue.batchTitle || '—' }}</template>
+            </span>
+          </div>
+          <div class="detail-item">
             <span class="detail-label">截止日期</span>
             <span class="detail-value" :style="{ color: !isDraft && isDeadlineNear ? '#F5222D' : '' }">
               <el-date-picker v-if="isDraft" v-model="issue.deadline" type="date" value-format="YYYY-MM-DD" size="small" style="width: 200px;" />
@@ -596,6 +603,7 @@ import {
   flowRecords,
   getFlowNodeLabel,
   currentUser,
+  getBatchNameByIssueId,
 } from '../mock/data'
 
 const route = useRoute()
@@ -607,6 +615,9 @@ const issue = ref(null)
 const found = mockIssues.find(i => i.id === issueId)
 if (found) {
   issue.value = JSON.parse(JSON.stringify(found))
+  if (!issue.value.batchTitle) {
+    issue.value.batchTitle = getBatchNameByIssueId(issue.value.id)
+  }
 }
 
 const hasSubIssues = computed(() => issue.value?.subIssues?.length > 0)
@@ -634,6 +645,7 @@ function validateDraftForSubmit() {
     { field: 'responsible', label: '负责人（主办）' },
     { field: 'surveyDate', label: '调研日期' },
     { field: 'surveyLocation', label: '调研地点' },
+    { field: 'batchTitle', label: '调研批次标题' },
     { field: 'deadline', label: '截止日期' },
   ]
   for (const r of required) {

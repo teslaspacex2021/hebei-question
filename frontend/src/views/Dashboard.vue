@@ -106,7 +106,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="currentStage" label="当前环节" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="date" :label="todoTab === 'done' ? '完成日期' : '截止日期'" width="110" />
+        <el-table-column prop="time" :label="todoTab === 'done' ? '处理时间' : '到达时间'" width="110" />
       </el-table>
       <div v-if="currentTodoList.length > 0" class="pagination-bar">
         <span class="total-text">共 {{ currentTotal }} 条</span>
@@ -194,6 +194,7 @@ import {
 
 const router = useRouter()
 const processedCorrectionIds = ref(new Set())
+const correctionProcessTimes = ref({})
 const correctionHandleVisible = ref(false)
 const correctionHandleTarget = ref(null)
 const correctionCorrectedDept = ref('')
@@ -231,8 +232,8 @@ const personalTodos = computed(() => {
         currentStage: '计划填报',
         status: t.status,
         statusLabel: t.statusLabel,
-        date: t.createDate,
         batch: '—',
+        time: t.createDate,
         link: '/dept-board',
       })
       seen.add(t.id)
@@ -251,8 +252,8 @@ const personalTodos = computed(() => {
         currentStage: issue.flowNodeLabel || '—',
         status: issue.status,
         statusLabel: issue.statusLabel,
-        date: issue.deadline || issue.updateDate,
         batch: batchName,
+        time: issue.updateDate,
         link: `/issues/${issue.id}`,
       })
       seen.add(issue.id)
@@ -264,6 +265,7 @@ const personalTodos = computed(() => {
       const isHandler = sub.handler?.includes(currentUser.name)
       const needUpdate = sub.collaborators?.some(c => c.name === currentUser.name && !c.hasUpdated)
       if ((isHandler || needUpdate) && activeStatuses.includes(sub.status) && !seen.has(sub.id)) {
+        const collaborator = sub.collaborators?.find(c => c.name === currentUser.name)
         todos.push({
           id: sub.id,
           title: `${issue.title} - ${sub.title}`,
@@ -272,8 +274,8 @@ const personalTodos = computed(() => {
           currentStage: issue.flowNodeLabel || '—',
           status: sub.status,
           statusLabel: sub.statusLabel,
-          date: sub.deadline || issue.deadline || issue.updateDate,
           batch: batchName,
+          time: collaborator?.updateDate || issue.updateDate,
           link: `/issues/${issue.id}`,
         })
         seen.add(sub.id)
@@ -293,8 +295,8 @@ const personalTodos = computed(() => {
         currentStage: o.flowNodeLabel || '—',
         status: o.status === 'in_progress' ? 'in_progress' : 'pending',
         statusLabel: o.statusLabel || '督办中',
-        date: o.deadline || o.createDate,
         batch: getBatchNameByIssueId(o.issueId) || '—',
+        time: o.createDate,
         link: `/issues/${o.issueId}`,
       })
       seen.add(o.id)
@@ -312,8 +314,8 @@ const personalTodos = computed(() => {
         currentStage: '待部门主任审批',
         status: 'pending',
         statusLabel: item.statusLabel || '待审批',
-        date: item.createDate,
         batch: '—',
+        time: item.createDate,
         link: '/dept-board',
       })
       seen.add(item.id)
@@ -337,12 +339,12 @@ const personalTodos = computed(() => {
         currentStage: item.currentStage || '发起人纠错处理',
         status: item.status,
         statusLabel: item.statusLabel || '待处理',
-        date: item.deadline || item.createDate,
         batch: getBatchNameByIssueId(item.issueId) || '—',
         issueId: item.issueId,
         issueTitle: item.issueTitle,
         originalDept: relatedIssue?.department || item.originalDept || '—',
         feedback: item.feedback || '',
+        time: item.createDate,
         link: `/issues/${item.issueId}`,
       })
       seen.add(item.id)
@@ -366,8 +368,8 @@ const personalDone = computed(() => {
         currentStage: '已完成',
         status: t.status,
         statusLabel: t.statusLabel,
-        date: t.submitDate || t.createDate,
         batch: '—',
+        time: t.submitDate || t.createDate,
         link: '/dept-board',
       })
       seen.add(t.id)
@@ -385,8 +387,8 @@ const personalDone = computed(() => {
         currentStage: issue.flowNodeLabel || '已办结',
         status: issue.status,
         statusLabel: issue.statusLabel,
-        date: issue.updateDate || issue.deadline,
         batch: batchName,
+        time: issue.updateDate,
         link: `/issues/${issue.id}`,
       })
       seen.add(issue.id)
@@ -404,8 +406,8 @@ const personalDone = computed(() => {
           currentStage: issue.flowNodeLabel || '已办结',
           status: sub.status,
           statusLabel: sub.statusLabel,
-          date: sub.deadline || issue.updateDate,
           batch: batchName,
+          time: issue.updateDate,
           link: `/issues/${issue.id}`,
         })
         seen.add(sub.id)
@@ -425,8 +427,8 @@ const personalDone = computed(() => {
         currentStage: o.flowNodeLabel || '已办结',
         status: 'completed',
         statusLabel: o.statusLabel || '已完成',
-        date: o.deadline || o.createDate,
         batch: getBatchNameByIssueId(o.issueId) || '—',
+        time: o.completeDate || o.createDate,
         link: `/issues/${o.issueId}`,
       })
       seen.add(o.id)
@@ -444,8 +446,8 @@ const personalDone = computed(() => {
         currentStage: item.statusLabel || '已审批',
         status: item.status,
         statusLabel: item.statusLabel || '已审批',
-        date: item.approveDate || item.createDate,
         batch: '—',
+        time: item.approveDate || item.createDate,
         link: '/dept-board',
       })
       seen.add(item.id)
@@ -467,15 +469,15 @@ const personalDone = computed(() => {
         currentStage: '已处理',
         status: 'completed',
         statusLabel: '已处理',
-        date: item.deadline || item.createDate,
         batch: getBatchNameByIssueId(item.issueId) || '—',
         issueId: item.issueId,
+        time: correctionProcessTimes.value[item.id] || item.processDate || item.createDate,
         link: `/issues/${item.issueId}`,
       })
       seen.add(item.id)
     })
 
-  return dones.sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  return dones.sort((a, b) => String(b.time || '').localeCompare(String(a.time || '')))
 })
 
 const currentTodoList = computed(() =>
@@ -541,6 +543,7 @@ function submitCorrectionHandle() {
     return
   }
   processedCorrectionIds.value.add(target.id)
+  correctionProcessTimes.value[target.id] = new Date().toISOString().split('T')[0]
   ElMessage.success(
     `已提交纠错：${target.issueTitle} 主办部门调整为「${correctionCorrectedDept.value}」`,
   )
