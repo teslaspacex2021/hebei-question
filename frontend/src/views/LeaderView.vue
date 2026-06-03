@@ -59,9 +59,6 @@
         <el-option v-for="d in deptOptions" :key="d.value" :label="d.label" :value="d.label" />
       </el-select>
       <div style="flex: 1;"></div>
-      <el-button type="warning" size="default" @click="showAISummary = true">
-        <el-icon><MagicStick /></el-icon> AI总结
-      </el-button>
       <el-button size="default" @click="handleExport">
         <el-icon><Download /></el-icon> 导出
       </el-button>
@@ -126,7 +123,7 @@
                   v-if="row.status === 'completed'"
                   @click="openSuperviseDialog(row)"
                 >督办</el-button>
-                <el-button type="primary" link size="small">详情</el-button>
+                <el-button type="primary" link size="small" @click="goIssueDetail(row)">详情</el-button>
               </div>
             </template>
           </el-table-column>
@@ -187,7 +184,7 @@
                     v-if="row.status === 'completed'"
                     @click.stop="openSuperviseDialog(row)"
                   >督办</el-button>
-                  <el-button type="primary" link size="small">详情</el-button>
+                  <el-button type="primary" link size="small" @click.stop="goIssueDetail(row)">详情</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -294,7 +291,7 @@
                 <el-table-column prop="responsible" label="负责人" width="70" />
                 <el-table-column label="操作" width="80">
                   <template #default="{ row }">
-                    <el-button type="primary" link size="small">详情</el-button>
+                    <el-button type="primary" link size="small" @click.stop="goIssueDetail(row)">详情</el-button>
                   </template>
                 </el-table-column>
               </el-table>
@@ -304,47 +301,20 @@
         <el-empty v-if="filteredSvOrders.length === 0" description="暂无督办单" />
       </div>
     </template>
-
-    <!-- AI总结弹窗 -->
-    <el-dialog v-model="showAISummary" title="AI智能总结" width="600px">
-      <div style="margin-bottom: 16px;">
-        <el-form :inline="true" size="default">
-          <el-form-item label="时间范围">
-            <el-date-picker v-model="aiDateRange" type="daterange" range-separator="-" start-placeholder="开始" end-placeholder="结束" />
-          </el-form-item>
-          <el-form-item label="分类">
-            <el-select v-model="aiCategory" placeholder="全部" clearable>
-              <el-option v-for="c in categories" :key="c.value" :label="c.label" :value="c.value" />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="generateAISummary">生成总结</el-button>
-          </el-form-item>
-        </el-form>
-      </div>
-      <div v-if="aiResult" style="background: #f6f8fa; padding: 16px; border-radius: 6px; line-height: 1.8; font-size: 13px;">
-        <p><b>问题概览：</b>所选范围内共有 18 个调研问题，涉及 7 个分类，10 个部门。</p>
-        <p><b>完成情况：</b>已完成 11 个（61.1%），解决中 5 个（27.8%），待处理 2 个（11.1%）。</p>
-        <p><b>高频问题：</b>后端技术类问题最多（7个），其次是经营业务类（3个）和客户服务类（2个）。</p>
-        <p><b>重点关注：</b>邯郸地区渠道合作伙伴激励政策、承德基站电力保障问题已被督办，需加速推进。</p>
-        <p><b>建议：</b>建议加强网络运维部和客户服务部的问题处理能力，当前超期率偏高。</p>
-      </div>
-      <div v-else style="text-align: center; padding: 40px; color: #999;">
-        请选择时间范围后点击"生成总结"
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Download, MagicStick, Warning } from '@element-plus/icons-vue'
+import { Search, Download, Warning } from '@element-plus/icons-vue'
 import {
   mockIssues, issueCategories, departments, flowNodes,
   supervisionOrders as svOrdersData, surveyBatches
 } from '../mock/data'
 
+const router = useRouter()
 const viewMode = ref('detail')
 const searchText = ref('')
 const filterCategory = ref('')
@@ -352,11 +322,6 @@ const filterMainDept = ref('')
 const filterAssistDept = ref('')
 
 const deptOptions = departments
-const dateRange = ref(null)
-const showAISummary = ref(false)
-const aiDateRange = ref(null)
-const aiCategory = ref('')
-const aiResult = ref(false)
 const expandBatch = ref('')
 const expandSv = ref('')
 
@@ -398,7 +363,11 @@ function getSvProgress(currentNode) {
   return Math.round(((idx + 1) / svNodeOrder.length) * 100)
 }
 
-const allIssues = computed(() => [...mockIssues].sort((a, b) => b.updateDate.localeCompare(a.updateDate)))
+const allIssues = computed(() =>
+  mockIssues
+    .filter(i => i.status !== 'draft')
+    .sort((a, b) => b.updateDate.localeCompare(a.updateDate)),
+)
 const inProgressIssues = computed(() => allIssues.value.filter(i => i.status === 'in_progress'))
 const completedRate = computed(() => {
   const total = allIssues.value.length
@@ -450,7 +419,14 @@ const filteredSvOrders = computed(() => {
 })
 
 function getBatchIssues(issueIds) {
-  return issueIds.map(id => mockIssues.find(i => i.id === id)).filter(Boolean)
+  return issueIds
+    .map(id => mockIssues.find(i => i.id === id))
+    .filter(i => i && i.status !== 'draft')
+}
+
+function goIssueDetail(row) {
+  if (!row?.id) return
+  router.push(`/issues/${row.id}`)
 }
 
 function getFlowColor(node) {
@@ -484,9 +460,5 @@ function confirmSupervise() {
 
 function handleExport() {
   ElMessage.success('导出中...')
-}
-
-function generateAISummary() {
-  aiResult.value = true
 }
 </script>

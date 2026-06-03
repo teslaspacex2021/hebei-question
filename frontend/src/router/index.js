@@ -53,6 +53,12 @@ const routes = [
     component: () => import('../views/IssueOrganizeDetail.vue'),
     meta: { title: '问题整理详情' }
   },
+  {
+    path: '/plan-todos/:id',
+    name: 'PlanTodoDetail',
+    component: () => import('../views/PlanTodoDetail.vue'),
+    meta: { title: '调研计划待办' }
+  },
 ]
 
 const router = createRouter({

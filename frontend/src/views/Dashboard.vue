@@ -52,40 +52,80 @@
     <!-- 待办模块 -->
     <div class="table-card">
       <div class="table-header todo-header">
-        <el-tabs v-model="todoTab" class="todo-tabs">
-          <el-tab-pane name="todo">
-            <template #label>
-              <span>待办</span>
-              <el-badge
-                v-if="personalTodos.length > 0"
-                :value="personalTodos.length"
-                class="todo-tab-badge"
-                type="danger"
-              />
-            </template>
-          </el-tab-pane>
-          <el-tab-pane name="done">
-            <template #label>
-              <span>已办</span>
-              <el-badge
-                v-if="personalDone.length > 0"
-                :value="personalDone.length"
-                class="todo-tab-badge"
-                type="info"
-              />
-            </template>
-          </el-tab-pane>
-        </el-tabs>
+        <div class="todo-header-row">
+          <el-tabs v-model="todoTab" class="todo-tabs">
+            <el-tab-pane name="todo">
+              <template #label>
+                <span>待办</span>
+                <el-badge
+                  v-if="personalTodos.length > 0"
+                  :value="personalTodos.length"
+                  class="todo-tab-badge"
+                  type="danger"
+                />
+              </template>
+            </el-tab-pane>
+            <el-tab-pane name="done">
+              <template #label>
+                <span>已办</span>
+                <el-badge
+                  v-if="personalDone.length > 0"
+                  :value="personalDone.length"
+                  class="todo-tab-badge"
+                  type="info"
+                />
+              </template>
+            </el-tab-pane>
+            <el-tab-pane name="draft">
+              <template #label>
+                <span>草稿箱</span>
+                <el-badge
+                  v-if="personalDrafts.length > 0"
+                  :value="personalDrafts.length"
+                  class="todo-tab-badge"
+                  type="warning"
+                />
+              </template>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+        <div class="filter-bar todo-filter-bar">
+          <el-input
+            v-model="filterKeyword"
+            placeholder="输入标题关键字"
+            :prefix-icon="Search"
+            style="width: 220px;"
+            size="default"
+            clearable
+          />
+          <el-select
+            v-model="filterType"
+            placeholder="流程类型"
+            size="default"
+            clearable
+            style="width: 140px; margin-left: 8px;"
+          >
+            <el-option
+              v-for="t in todoTypeOptions"
+              :key="t"
+              :label="t"
+              :value="t"
+            />
+          </el-select>
+          <el-button type="primary" size="default" style="margin-left: 8px;" @click="router.push('/issues/create')">
+            <el-icon><Plus /></el-icon> 新建问题
+          </el-button>
+        </div>
       </div>
       <el-table
-        v-if="currentTodoList.length > 0"
+        v-if="filteredCurrentTodoList.length > 0"
         :data="pagedCurrentTodoList"
         class="compact-table todo-table"
         size="small"
         :header-cell-style="{ background: '#fafafa', color: '#333', fontWeight: 600, padding: '8px 0' }"
         @row-click="handleTodo"
       >
-        <el-table-column :label="todoTab === 'done' ? '已办事项' : '待办事项'" min-width="220" show-overflow-tooltip>
+        <el-table-column :label="todoColumnTitle" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <span class="todo-title-link">{{ row.title }}</span>
           </template>
@@ -97,22 +137,28 @@
           </template>
         </el-table-column>
         <el-table-column prop="currentStage" label="当前环节" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="time" :label="todoTab === 'done' ? '处理时间' : '到达时间'" width="110" />
+        <el-table-column prop="time" :label="todoTimeLabel" width="110" />
+        <el-table-column v-if="todoTab === 'draft'" label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link size="small" @click.stop="editDraft(row)">编辑</el-button>
+            <el-button type="danger" link size="small" @click.stop="deleteDraft(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
-      <div v-if="currentTodoList.length > 0" class="pagination-bar">
-        <span class="total-text">共 {{ currentTotal }} 条</span>
+      <div v-if="filteredCurrentTodoList.length > 0" class="pagination-bar">
+        <span class="total-text">共 {{ filteredTotal }} 条</span>
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="currentPageSize"
           :page-sizes="[10, 20, 50]"
-          :total="currentTotal"
+          :total="filteredTotal"
           layout="sizes, prev, pager, next"
           size="small"
         />
       </div>
       <el-empty
         v-else
-        :description="todoTab === 'done' ? '暂无已办' : '暂无待办'"
+        :description="emptyDescription"
         :image-size="60"
         style="padding: 24px;"
       />
@@ -172,6 +218,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Search, Plus } from '@element-plus/icons-vue'
 import {
   mockIssues,
   planTodos,
@@ -184,24 +231,29 @@ import {
 } from '../mock/data'
 
 const router = useRouter()
+const localIssues = ref([...mockIssues])
 const processedCorrectionIds = ref(new Set())
 const correctionProcessTimes = ref({})
 const correctionHandleVisible = ref(false)
 const correctionHandleTarget = ref(null)
 const correctionCorrectedDept = ref('')
 const todoTab = ref('todo')
+const filterKeyword = ref('')
+const filterType = ref('')
 const todoPage = ref(1)
 const todoPageSize = ref(10)
 const donePage = ref(1)
 const donePageSize = ref(10)
+const draftPage = ref(1)
+const draftPageSize = ref(10)
 
 // 统计数据
-const totalIssues = computed(() => mockIssues.length)
-const pendingCount = computed(() => mockIssues.filter(i => i.status === 'pending').length)
-const inProgressCount = computed(() => mockIssues.filter(i => i.status === 'in_progress').length)
-const completedCount = computed(() => mockIssues.filter(i => i.status === 'completed').length)
+const totalIssues = computed(() => localIssues.value.length)
+const pendingCount = computed(() => localIssues.value.filter(i => i.status === 'pending').length)
+const inProgressCount = computed(() => localIssues.value.filter(i => i.status === 'in_progress').length)
+const completedCount = computed(() => localIssues.value.filter(i => i.status === 'completed').length)
 const avgSatisfaction = computed(() => {
-  const rated = mockIssues.filter(i => i.satisfaction > 0)
+  const rated = localIssues.value.filter(i => i.satisfaction > 0)
   if (rated.length === 0) return '—'
   return (rated.reduce((s, i) => s + i.satisfaction, 0) / rated.length).toFixed(1)
 })
@@ -224,12 +276,12 @@ const personalTodos = computed(() => {
         statusLabel: t.statusLabel,
         batch: '—',
         time: t.createDate,
-        link: '/dept-board',
+        link: `/plan-todos/${t.id}`,
       })
       seen.add(t.id)
     })
 
-  mockIssues.forEach(issue => {
+  localIssues.value.forEach(issue => {
     const isParentResponsible = issue.responsible === currentUser.name
     const batchName = getBatchNameByIssueId(issue.id) || '—'
 
@@ -320,7 +372,7 @@ const personalTodos = computed(() => {
     )
     .forEach(item => {
       if (seen.has(item.id)) return
-      const relatedIssue = mockIssues.find(i => i.id === item.issueId)
+      const relatedIssue = localIssues.value.find(i => i.id === item.issueId)
       todos.push({
         id: item.id,
         title: `纠错：${item.issueTitle}`,
@@ -360,12 +412,12 @@ const personalDone = computed(() => {
         statusLabel: t.statusLabel,
         batch: '—',
         time: t.submitDate || t.createDate,
-        link: '/dept-board',
+        link: `/plan-todos/${t.id}`,
       })
       seen.add(t.id)
     })
 
-  mockIssues.forEach(issue => {
+  localIssues.value.forEach(issue => {
     const isParentResponsible = issue.responsible === currentUser.name
     const batchName = getBatchNameByIssueId(issue.id) || '—'
     if (isParentResponsible && issue.status === 'completed' && !seen.has(issue.id)) {
@@ -470,26 +522,89 @@ const personalDone = computed(() => {
   return dones.sort((a, b) => String(b.time || '').localeCompare(String(a.time || '')))
 })
 
-const currentTodoList = computed(() =>
-  todoTab.value === 'done' ? personalDone.value : personalTodos.value,
+const personalDrafts = computed(() =>
+  localIssues.value
+    .filter(i => i.status === 'draft' && i.responsible === currentUser.name)
+    .map(issue => ({
+      id: issue.id,
+      title: issue.title,
+      type: 'draft',
+      typeLabel: '草稿',
+      currentStage: issue.flowNodeLabel || '草稿',
+      batch: getBatchNameByIssueId(issue.id) || issue.batchTitle || '—',
+      time: issue.updateDate,
+      link: `/issues/${issue.id}`,
+    }))
+    .sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))),
 )
 
-const currentTotal = computed(() =>
-  todoTab.value === 'done' ? personalDone.value.length : personalTodos.value.length,
-)
+const todoTypeOptions = computed(() => {
+  const types = new Set()
+  ;[...personalTodos.value, ...personalDone.value, ...personalDrafts.value].forEach(item => {
+    if (item.typeLabel && item.typeLabel !== '草稿') types.add(item.typeLabel)
+  })
+  return [...types]
+})
+
+const currentTodoList = computed(() => {
+  if (todoTab.value === 'done') return personalDone.value
+  if (todoTab.value === 'draft') return personalDrafts.value
+  return personalTodos.value
+})
+
+const filteredCurrentTodoList = computed(() => {
+  let list = [...currentTodoList.value]
+  if (filterKeyword.value) {
+    list = list.filter(i => i.title.includes(filterKeyword.value))
+  }
+  if (filterType.value) {
+    list = list.filter(i => i.typeLabel === filterType.value)
+  }
+  return list
+})
+
+const filteredTotal = computed(() => filteredCurrentTodoList.value.length)
+
+const todoColumnTitle = computed(() => {
+  if (todoTab.value === 'done') return '已办事项'
+  if (todoTab.value === 'draft') return '草稿事项'
+  return '待办事项'
+})
+
+const todoTimeLabel = computed(() => {
+  if (todoTab.value === 'done') return '处理时间'
+  if (todoTab.value === 'draft') return '保存时间'
+  return '到达时间'
+})
+
+const emptyDescription = computed(() => {
+  if (todoTab.value === 'done') return '暂无已办'
+  if (todoTab.value === 'draft') return '暂无草稿'
+  return '暂无待办'
+})
 
 const currentPage = computed({
-  get: () => (todoTab.value === 'done' ? donePage.value : todoPage.value),
+  get: () => {
+    if (todoTab.value === 'done') return donePage.value
+    if (todoTab.value === 'draft') return draftPage.value
+    return todoPage.value
+  },
   set: (v) => {
     if (todoTab.value === 'done') donePage.value = v
+    else if (todoTab.value === 'draft') draftPage.value = v
     else todoPage.value = v
   },
 })
 
 const currentPageSize = computed({
-  get: () => (todoTab.value === 'done' ? donePageSize.value : todoPageSize.value),
+  get: () => {
+    if (todoTab.value === 'done') return donePageSize.value
+    if (todoTab.value === 'draft') return draftPageSize.value
+    return todoPageSize.value
+  },
   set: (v) => {
     if (todoTab.value === 'done') donePageSize.value = v
+    else if (todoTab.value === 'draft') draftPageSize.value = v
     else todoPageSize.value = v
   },
 })
@@ -498,11 +613,26 @@ const pagedCurrentTodoList = computed(() => {
   const page = currentPage.value
   const size = currentPageSize.value
   const start = (page - 1) * size
-  return currentTodoList.value.slice(start, start + size)
+  return filteredCurrentTodoList.value.slice(start, start + size)
 })
+
+function editDraft(row) {
+  if (row?.link) router.push(row.link)
+}
+
+function deleteDraft(row) {
+  const idx = localIssues.value.findIndex(i => i.id === row.id)
+  if (idx === -1) return
+  localIssues.value.splice(idx, 1)
+  ElMessage.success(`已删除草稿问题「${row.title}」`)
+}
 
 function handleTodo(todo) {
   if (!todo) return
+  if (todoTab.value === 'draft') {
+    editDraft(todo)
+    return
+  }
   if (todoTab.value === 'todo' && todo.type === 'correction') {
     openCorrectionHandleDialog(todo)
     return
@@ -582,11 +712,24 @@ function submitCorrectionHandle() {
   line-height: 1.5;
 }
 .todo-header {
-  padding: 0 16px;
+  padding: 0 16px 12px;
   border-bottom: none;
 }
+.todo-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.todo-filter-bar {
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
 .todo-tabs {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 .todo-tabs :deep(.el-tabs__header) {
   margin: 0;

@@ -52,25 +52,10 @@
     <!-- 搜索和操作栏 -->
     <div class="filter-bar">
       <el-input v-model="searchText" placeholder="输入标题关键字" :prefix-icon="Search" style="width: 220px;" size="default" clearable />
-      <el-select
-        v-model="activeTab"
-        placeholder="状态筛选"
-        size="default"
-        style="width: 140px; margin-left: 8px;"
-      >
-        <el-option label="全部状态" value="all" />
-        <el-option label="草稿" value="draft" />
-        <el-option label="待处理" value="pending" />
-        <el-option label="解决中" value="in_progress" />
-        <el-option label="已结束" value="completed" />
-      </el-select>
       <div style="flex: 1;"></div>
       <span style="font-size: 12px; color: #999; margin-right: 8px;">排序：更新日期-升序</span>
       <el-button size="default" :icon="Filter">筛选</el-button>
       <el-button size="default" :icon="Setting">字段配置</el-button>
-      <el-button type="primary" size="default" @click="$router.push('/issues/create')">
-        <el-icon><Plus /></el-icon> 新建问题
-      </el-button>
     </div>
 
     <!-- 数据表格 -->
@@ -83,36 +68,6 @@
         :header-cell-style="{ background: '#fafafa', color: '#333', fontWeight: 600, padding: '8px 0' }"
         @row-click="showDetail"
       >
-        <el-table-column type="expand">
-          <template #default="{ row }">
-            <div style="padding: 12px 20px;">
-              <div class="detail-item">
-                <span class="detail-label">问题编号：</span>
-                <span class="detail-value">{{ row.id }}</span>
-              </div>
-              <div class="detail-item" v-if="row.parentId !== row.id">
-                <span class="detail-label">主单编号：</span>
-                <span class="detail-value">{{ row.parentId }}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">调研日期：</span>
-                <span class="detail-value">{{ row.surveyDate }}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">调研地点：</span>
-                <span class="detail-value">{{ row.surveyLocation }}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">调研领导：</span>
-                <span class="detail-value">{{ row.leader }}</span>
-              </div>
-              <div class="detail-item" v-if="row.replyContent">
-                <span class="detail-label">答复内容：</span>
-                <span class="detail-value">{{ row.replyContent }}</span>
-              </div>
-            </div>
-          </template>
-        </el-table-column>
         <el-table-column prop="title" label="问题名称" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <div style="display: flex; align-items: center; gap: 6px;">
@@ -159,35 +114,15 @@
         </el-table-column>
         <el-table-column prop="responsible" label="负责人" width="70" />
         <el-table-column prop="handler" label="当前处理人" width="90" show-overflow-tooltip />
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="80" fixed="right">
           <template #default="{ row }">
             <div class="action-btns" style="gap: 2px; flex-wrap: nowrap;">
-              <el-button
-                type="primary"
-                link
-                size="small"
-                @click.stop="handleCommand('detail', row)"
-              >详情</el-button>
-              <el-button
-                v-if="row.status === 'draft'"
-                type="primary"
-                link
-                size="small"
-                @click.stop="handleCommand('edit', row)"
-              >编辑</el-button>
               <el-button
                 type="warning"
                 link
                 size="small"
                 @click.stop="handleCommand('pin', row)"
               >{{ row.pinned ? '取消置顶' : '置顶' }}</el-button>
-              <el-button
-                v-if="row.status === 'draft'"
-                type="danger"
-                link
-                size="small"
-                @click.stop="handleCommand('delete', row)"
-              >删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -236,7 +171,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Filter, Setting, Plus, MoreFilled, EditPen, Upload, Top } from '@element-plus/icons-vue'
+import { Search, Filter, Setting, Upload, Top } from '@element-plus/icons-vue'
 import { mockIssues, flowNodes, progressLogs, getBatchNameByIssueId } from '../mock/data'
 
 const router = useRouter()
@@ -245,7 +180,7 @@ const searchText = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const progressDialogVisible = ref(false)
-const localIssues = ref([...mockIssues])
+const localIssues = ref(mockIssues.filter(i => i.status !== 'draft'))
 
 function flattenIssuesForList(issues) {
   const rows = []
@@ -309,9 +244,7 @@ const progressForm = ref({
 
 const filteredIssues = computed(() => {
   let list = [...listRows.value]
-  if (activeTab.value === 'draft') {
-    list = list.filter(i => i.status === 'draft' || i.isDraft)
-  } else if (activeTab.value === 'pending') {
+  if (activeTab.value === 'pending') {
     list = list.filter(i => i.status === 'pending')
   } else if (activeTab.value === 'in_progress') {
     list = list.filter(i => i.status === 'in_progress')
@@ -355,26 +288,11 @@ function showDetail(row) {
 }
 
 function handleCommand(cmd, row) {
-  if (cmd === 'detail') {
-    showDetail(row)
-  } else if (cmd === 'edit') {
-    // 暂以详情页作为编辑入口
-    showDetail(row)
-  } else if (cmd === 'pin') {
+  if (cmd === 'pin') {
     const idx = localIssues.value.findIndex(i => i.id === row.parentId)
     if (idx !== -1) {
       localIssues.value[idx] = { ...localIssues.value[idx], pinned: !localIssues.value[idx].pinned }
       ElMessage.success(localIssues.value[idx].pinned ? '已置顶' : '已取消置顶')
-    }
-  } else if (cmd === 'delete') {
-    if (row.status !== 'draft') {
-      ElMessage.warning('仅草稿状态的问题可以删除')
-      return
-    }
-    const idx = localIssues.value.findIndex(i => i.id === row.parentId)
-    if (idx !== -1) {
-      localIssues.value.splice(idx, 1)
-      ElMessage.success(`已删除草稿问题「${row.title}」`)
     }
   }
 }
