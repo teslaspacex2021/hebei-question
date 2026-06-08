@@ -14,7 +14,7 @@ import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import IssueFormEditor from '../components/IssueFormEditor.vue'
-import { mockIssues, currentUser, getFlowNodeLabel } from '../mock/data'
+import { mockIssues, currentUser, getFlowNodeLabel, getFirstFlowNodeAfterSubmit } from '../mock/data'
 
 const route = useRoute()
 const router = useRouter()
@@ -62,6 +62,7 @@ function onSaveDraft(patch) {
     satisfaction: 0,
     supervised: false,
     replyContent: patch.replyContent,
+    remark: patch.remark || '',
     expectedComplete: patch.expectedComplete,
     pinned: false,
     resolved: patch.resolved,
@@ -75,6 +76,42 @@ function onSubmit(patch) {
   const type = patch.issueType || issueType.value
   const unresolvedCount = patch.subIssues?.length || 0
   const resolvedOnly = patch.resolved && unresolvedCount === 0
+  const firstNode = getFirstFlowNodeAfterSubmit(type)
+
+  mockIssues.push({
+    id: buildIssueId(type),
+    issueType: type,
+    title: patch.title,
+    category: patch.category,
+    categoryLabel: patch.categoryLabel,
+    flowNode: resolvedOnly ? 'completed' : firstNode,
+    flowNodeLabel: getFlowNodeLabel(resolvedOnly ? 'completed' : firstNode, type),
+    progress: resolvedOnly ? 100 : 0,
+    status: resolvedOnly ? 'completed' : 'pending',
+    statusLabel: resolvedOnly ? '已完成' : '待处理',
+    description: patch.description,
+    updateDate: patch.updateDate,
+    responsible: currentUser.name,
+    handler: '',
+    deadline: patch.deadline,
+    department: patch.department,
+    surveyDate: patch.surveyDate || '',
+    surveyLocation: patch.surveyLocation || '',
+    leader: patch.leader || '',
+    batchTitle: patch.batchTitle,
+    satisfaction: 0,
+    supervised: false,
+    replyContent: patch.replyContent,
+    remark: patch.remark || '',
+    expectedComplete: patch.expectedComplete,
+    pinned: false,
+    resolved: patch.resolved,
+    subIssues: patch.subIssues?.map(sub => ({
+      ...sub,
+      status: resolvedOnly ? 'completed' : 'pending',
+      statusLabel: resolvedOnly ? '已完成' : '待处理',
+    })) || [],
+  })
 
   if (resolvedOnly) {
     ElMessage.success('已解决问题已录入，无需流程审批')

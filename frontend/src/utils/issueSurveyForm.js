@@ -12,6 +12,7 @@ export function createEmptyIssueRow() {
     otherDepts: [],
     expectedDate: '',
     resolvedRemark: '',
+    remark: '',
   }
 }
 
@@ -65,6 +66,7 @@ function buildIssueRowFromSub(sub, issue, primaryDept) {
     otherDepts: (sub.assistDepts || []).map(deptValueFromLabel).filter(Boolean),
     expectedDate: sub.deadline || issue.deadline || '',
     resolvedRemark: '',
+    remark: issue.remark || '',
   }
 }
 
@@ -86,6 +88,7 @@ export function issueToSurveyForm(issue, locationOptions) {
           otherDepts: [],
           expectedDate: issue.deadline || issue.expectedComplete || '',
           resolvedRemark: '',
+          remark: issue.remark || '',
         }]
   } else if (issue.subIssues?.length) {
     issues = issue.subIssues.map(sub => buildIssueRowFromSub(sub, issue, primaryDept))
@@ -157,6 +160,7 @@ export function surveyFormToIssuePatch(form, locationOptions, existingIssue = nu
     categoryLabel,
     department: mainDeptLabel || existingIssue?.department || '',
     description: primary?.content || existingIssue?.description || '',
+    remark: issueType === 'daily' ? (primary?.remark || existingIssue?.remark || '') : (existingIssue?.remark || ''),
     resolved: issueType === 'daily' ? false : form.issues.every(i => i.resolved),
     replyContent: form.issues.find(i => i.resolved)?.resolvedRemark || existingIssue?.replyContent || '',
     subIssues,
@@ -165,12 +169,6 @@ export function surveyFormToIssuePatch(form, locationOptions, existingIssue = nu
 }
 
 export function validateSurveyForm(form, issueType = 'survey') {
-  if (issueType !== 'daily' && !form.batchTitle?.trim()) return '请填写调研批次标题'
-  if (!form.startDate) return '请选择调研开始时间'
-  if (!form.endDate) return '请选择调研结束时间'
-  if (!form.location?.length) return '请选择调研地点'
-  if (!form.leader) return '请选择调研领导/部门'
-
   if (issueType === 'daily') {
     if (form.issues.length !== 1) return '日常问题每次仅可填报一条'
     const item = form.issues[0]
@@ -179,6 +177,12 @@ export function validateSurveyForm(form, issueType = 'survey') {
     }
     return ''
   }
+
+  if (!form.batchTitle?.trim()) return '请填写调研批次标题'
+  if (!form.startDate) return '请选择调研开始时间'
+  if (!form.endDate) return '请选择调研结束时间'
+  if (!form.location?.length) return '请选择调研地点'
+  if (!form.leader) return '请选择调研领导/部门'
 
   const resolvedIssues = form.issues.filter(i => i.resolved)
   const unresolvedIssues = form.issues.filter(i => !i.resolved)

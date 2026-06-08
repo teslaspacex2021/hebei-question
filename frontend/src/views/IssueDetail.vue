@@ -32,13 +32,86 @@
     />
 
     <template v-else>
-    <!-- 基本信息 -->
+    <!-- 日常问题详情 -->
+    <template v-if="isDailyIssue">
+      <div class="form-card">
+        <div class="form-section-title">日常问题信息</div>
+        <div class="daily-detail-form">
+          <div class="daily-detail-field">
+            <div class="daily-detail-label">问题编号</div>
+            <div class="daily-detail-value">{{ issue.id }}</div>
+          </div>
+          <div class="daily-detail-field">
+            <div class="daily-detail-label">问题内容</div>
+            <div class="daily-detail-value">{{ issue.description || '—' }}</div>
+          </div>
+          <div class="daily-detail-field">
+            <div class="daily-detail-label">主要答复部门</div>
+            <div class="daily-detail-value">{{ issue.department || '—' }}</div>
+          </div>
+          <div class="daily-detail-field">
+            <div class="daily-detail-label">配合部门</div>
+            <div class="daily-detail-value">{{ dailyAssistDepts }}</div>
+          </div>
+          <div class="daily-detail-field">
+            <div class="daily-detail-label">期望答复时间</div>
+            <div class="daily-detail-value" :style="{ color: isDeadlineNear ? '#F5222D' : '' }">
+              {{ issue.deadline || '—' }}
+              <span v-if="issue.delayedDeadline" style="color: #E6A23C; margin-left: 8px;">
+                (已延期至 {{ issue.delayedDeadline }})
+              </span>
+            </div>
+          </div>
+          <div v-if="issue.remark" class="daily-detail-field">
+            <div class="daily-detail-label">备注</div>
+            <div class="daily-detail-value">{{ issue.remark }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <div class="form-section-title">办理信息</div>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <div class="detail-item">
+              <span class="detail-label">当前状态</span>
+              <span class="detail-value"><span :class="'status-tag status-' + issue.status">{{ issue.statusLabel }}</span></span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">流程节点</span>
+              <span class="detail-value">{{ issue.flowNodeLabel }}</span>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="detail-item">
+              <span class="detail-label">发起人</span>
+              <span class="detail-value">{{ issue.responsible || '—' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">当前处理人</span>
+              <span class="detail-value">{{ issue.handler || '—' }}</span>
+            </div>
+          </el-col>
+        </el-row>
+        <div class="detail-item" v-if="issue.replyContent">
+          <span class="detail-label">答复内容</span>
+          <span class="detail-value">{{ issue.replyContent }}</span>
+        </div>
+        <div class="detail-item" v-if="issue.supervised">
+          <span class="detail-label">督办状态</span>
+          <span class="detail-value supervise-badge"><el-icon><Warning /></el-icon> 已被督办</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- 调研问题详情 -->
+    <template v-else>
     <div class="form-card">
       <div class="form-section-title">基本信息</div>
       <el-row :gutter="16">
         <el-col :span="12">
           <div class="detail-item"><span class="detail-label">问题编号</span><span class="detail-value">{{ issue.id }}</span></div>
-          <div v-if="!isDailyIssue" class="detail-item">
+          <div class="detail-item">
             <span class="detail-label">问题分类</span>
             <span class="detail-value">{{ issue.categoryLabel || '—' }}</span>
           </div>
@@ -56,14 +129,14 @@
           <div class="detail-item"><span class="detail-label">当前状态</span><span class="detail-value"><span :class="'status-tag status-' + issue.status">{{ issue.statusLabel }}</span></span></div>
           <div class="detail-item"><span class="detail-label">流程节点</span><span class="detail-value">{{ issue.flowNodeLabel }}</span></div>
           <div class="detail-item">
-            <span class="detail-label">{{ isDailyIssue ? '问题日期' : '调研日期' }}</span>
+            <span class="detail-label">调研日期</span>
             <span class="detail-value">{{ issue.surveyDate }}</span>
           </div>
           <div class="detail-item">
-            <span class="detail-label">{{ isDailyIssue ? '问题地点' : '调研地点' }}</span>
+            <span class="detail-label">调研地点</span>
             <span class="detail-value">{{ issue.surveyLocation }}</span>
           </div>
-          <div v-if="!isDailyIssue" class="detail-item">
+          <div class="detail-item">
             <span class="detail-label">调研批次标题</span>
             <span class="detail-value">{{ issue.batchTitle || '—' }}</span>
           </div>
@@ -78,7 +151,7 @@
           </div>
         </el-col>
       </el-row>
-      <div v-if="!isDailyIssue" class="detail-item" style="margin-top: 4px;">
+      <div class="detail-item" style="margin-top: 4px;">
         <span class="detail-label">进度</span>
         <span class="detail-value"><el-progress :percentage="issue.progress" :stroke-width="10" style="width: 400px;" /></span>
       </div>
@@ -95,9 +168,10 @@
         <span class="detail-value supervise-badge"><el-icon><Warning /></el-icon> 已被督办</span>
       </div>
     </div>
+    </template>
 
     <!-- 问题清单（即子问题；二级办理时可维护协同与进展） -->
-    <div ref="issueListSectionRef" class="form-card issue-list-merged" v-if="mergedIssueRows.length > 0">
+    <div ref="issueListSectionRef" class="form-card issue-list-merged" v-if="!isDailyIssue && mergedIssueRows.length > 0">
       <div class="issue-list-header">
         <div class="issue-list-header-text">
           <div class="form-section-title" style="margin-bottom: 6px;">问题清单</div>
@@ -565,6 +639,12 @@ if (found) {
 const hasSubIssues = computed(() => issue.value?.subIssues?.length > 0)
 
 const isDailyIssue = computed(() => issue.value?.issueType === 'daily')
+
+const dailyAssistDepts = computed(() => {
+  const sub = issue.value?.subIssues?.[0]
+  if (sub?.assistDepts?.length) return sub.assistDepts.join('、')
+  return '—'
+})
 
 const issueTypeLabel = computed(() =>
   issueTypes.find(t => t.value === (issue.value?.issueType || 'survey'))?.label || '',
@@ -1179,6 +1259,29 @@ function submitCollaboratorUpdate() {
   font-size: 11px;
   color: #999;
   margin-top: 2px;
+}
+.daily-detail-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 100%;
+}
+.daily-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.daily-detail-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+.daily-detail-value {
+  font-size: 14px;
+  color: #595959;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .collab-pending {
   color: #e6a23c;
