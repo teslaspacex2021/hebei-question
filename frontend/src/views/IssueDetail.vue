@@ -7,6 +7,7 @@
       </el-button>
       <span style="font-size: 15px; font-weight: 600; color: #333; margin-left: 8px;">{{ isDraft ? (issue.batchTitle || issue.title) : issue.title }}</span>
       <el-tag v-if="isDraft" type="info" effect="plain" size="small" style="margin-left: 8px;">草稿编辑中</el-tag>
+      <el-tag v-if="issueTypeLabel" type="info" effect="plain" size="small" style="margin-left: 8px;">{{ issueTypeLabel }}</el-tag>
       <el-tag v-if="issue.pinned" type="danger" size="small" style="margin-left: 8px;">置顶</el-tag>
       <div style="flex: 1;"></div>
       <template v-if="!isDraft">
@@ -22,6 +23,7 @@
     <IssueFormEditor
       v-if="isDraft"
       :issue="issue"
+      :issue-type="issue.issueType || 'survey'"
       submit-label="提交办理"
       show-draft-icon
       @cancel="router.back()"
@@ -36,9 +38,9 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <div class="detail-item"><span class="detail-label">问题编号</span><span class="detail-value">{{ issue.id }}</span></div>
-          <div class="detail-item">
+          <div v-if="!isDailyIssue" class="detail-item">
             <span class="detail-label">问题分类</span>
-            <span class="detail-value">{{ issue.categoryLabel }}</span>
+            <span class="detail-value">{{ issue.categoryLabel || '—' }}</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">所属部门</span>
@@ -54,14 +56,14 @@
           <div class="detail-item"><span class="detail-label">当前状态</span><span class="detail-value"><span :class="'status-tag status-' + issue.status">{{ issue.statusLabel }}</span></span></div>
           <div class="detail-item"><span class="detail-label">流程节点</span><span class="detail-value">{{ issue.flowNodeLabel }}</span></div>
           <div class="detail-item">
-            <span class="detail-label">调研日期</span>
+            <span class="detail-label">{{ isDailyIssue ? '问题日期' : '调研日期' }}</span>
             <span class="detail-value">{{ issue.surveyDate }}</span>
           </div>
           <div class="detail-item">
-            <span class="detail-label">调研地点</span>
+            <span class="detail-label">{{ isDailyIssue ? '问题地点' : '调研地点' }}</span>
             <span class="detail-value">{{ issue.surveyLocation }}</span>
           </div>
-          <div class="detail-item">
+          <div v-if="!isDailyIssue" class="detail-item">
             <span class="detail-label">调研批次标题</span>
             <span class="detail-value">{{ issue.batchTitle || '—' }}</span>
           </div>
@@ -76,7 +78,7 @@
           </div>
         </el-col>
       </el-row>
-      <div class="detail-item" style="margin-top: 4px;">
+      <div v-if="!isDailyIssue" class="detail-item" style="margin-top: 4px;">
         <span class="detail-label">进度</span>
         <span class="detail-value"><el-progress :percentage="issue.progress" :stroke-width="10" style="width: 400px;" /></span>
       </div>
@@ -95,21 +97,21 @@
     </div>
 
     <!-- 问题清单（即子问题；二级办理时可维护协同与进展） -->
-    <div class="form-card issue-list-merged" v-if="mergedIssueRows.length > 0">
+    <div ref="issueListSectionRef" class="form-card issue-list-merged" v-if="mergedIssueRows.length > 0">
       <div class="issue-list-header">
         <div class="issue-list-header-text">
           <div class="form-section-title" style="margin-bottom: 6px;">问题清单</div>
-          <p class="issue-list-desc">
-            <template v-if="isLevel2Process">
-              当前为 <strong>二级办理</strong>：请展开各行维护「协同处理人」，填写进展并将进度更新至 100%；全部达标后方可提交至部门主任。
+          <p v-if="!isDailyIssue" class="issue-list-desc">
+            <template v-if="canAccessLevel2Progress">
+              可随时进入 <strong>二级办理</strong> 更新进展：展开各行维护「协同处理人」并填写进展；提交至下一环节时不校验进度是否达到 100%。
             </template>
             <template v-else>
-              与「子问题」为同一清单。协同处理、进展分工仅在 <strong>二级办理</strong> 环节办理，当前环节为只读查看。
+              与「子问题」为同一清单。当前状态为只读查看。
             </template>
           </p>
         </div>
-        <el-tag :type="isLevel2Process ? 'warning' : 'info'" effect="plain" size="small">
-          {{ isLevel2Process ? '可办理协同' : '仅查看' }}
+        <el-tag v-if="!isDailyIssue" :type="canAccessLevel2Progress ? 'warning' : 'info'" effect="plain" size="small">
+          {{ canAccessLevel2Progress ? '可更新进展' : '仅查看' }}
         </el-tag>
       </div>
 
@@ -121,7 +123,7 @@
         class="issue-list-table"
         :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '8px 0' }"
       >
-        <el-table-column v-if="isLevel2Process && hasSubIssues" type="expand" width="44">
+        <el-table-column v-if="canAccessLevel2Progress && hasSubIssues" type="expand" width="44">
           <template #default="{ row }">
             <div v-if="row.subIdx >= 0" class="expand-inner">
               <div class="expand-toolbar">
@@ -192,11 +194,11 @@
 
               <div v-if="isSubIssueAllUpdated(issue.subIssues[row.subIdx])" class="collab-alert collab-alert--ok">
                 <el-icon><CircleCheck /></el-icon>
-                <span>该子问题协同处理人已全部更新且进度均为 100%</span>
+                <span>该子问题协同处理人已全部完成进展更新</span>
               </div>
               <div v-else-if="issue.subIssues[row.subIdx].collaborators?.length" class="collab-alert collab-alert--warn">
                 <el-icon><WarningFilled /></el-icon>
-                <span>尚有 {{ countIncompleteCollaborators(issue.subIssues[row.subIdx]) }} 人未满足「已更新且进度 100%」，无法提交至下一步</span>
+                <span>尚有 {{ countIncompleteCollaborators(issue.subIssues[row.subIdx]) }} 位协同处理人未更新进展</span>
               </div>
             </div>
           </template>
@@ -204,7 +206,7 @@
         <el-table-column prop="seq" label="序号" width="52" align="center" />
         <el-table-column prop="subId" label="子问题编号" min-width="118" show-overflow-tooltip />
         <el-table-column prop="title" label="问题内容" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="categoryLabel" label="问题分类" width="108" show-overflow-tooltip />
+        <el-table-column v-if="!isDailyIssue" prop="categoryLabel" label="问题分类" width="108" show-overflow-tooltip />
         <el-table-column prop="mainDept" label="主办部门" width="108" show-overflow-tooltip />
         <el-table-column prop="assistDeptsLabel" label="配合部门" width="112" show-overflow-tooltip />
         <el-table-column prop="handler" label="处理人" width="88" show-overflow-tooltip />
@@ -214,16 +216,16 @@
             <span :class="'status-tag status-' + row.status">{{ row.statusLabel }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="进度" width="130" align="center">
+        <el-table-column v-if="!isDailyIssue" label="进度" width="130" align="center">
           <template #default="{ row }">
             <el-progress :percentage="row.progress" :stroke-width="6" :show-text="true" style="width: 110px;" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" :width="actionColumnWidth" align="center" fixed="right">
+        <el-table-column v-if="!isDailyIssue" label="操作" :width="actionColumnWidth" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openSubProgressDialog(row)">更新记录</el-button>
             <el-button
-              v-if="isLevel2Process && row.subIdx >= 0"
+              v-if="canAccessLevel2Progress && row.subIdx >= 0"
               type="primary"
               link
               size="small"
@@ -281,13 +283,9 @@
           </div>
           <div class="route-assignee-item">
             <span class="route-assignee-label">目标环节</span>
-            <span class="route-assignee-value">{{ getFlowNodeLabel(selectedRoute?.targetNode) }}</span>
+            <span class="route-assignee-value">{{ getFlowNodeLabel(selectedRoute?.targetNode, issue.issueType || 'survey') }}</span>
           </div>
         </div>
-      </div>
-      <div v-if="isLevel2Process && hasSubIssues && !allCollaboratorsUpdated" style="margin-bottom: 12px; background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; gap: 8px;">
-        <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
-        <span style="font-size: 13px; color: #D48806;">提示：所有子问题的协同处理人均需完成进展更新且进度为 100% 后，才可继续提交下一步。当前还有 {{ pendingCollaboratorsCount }} 位未达标。</span>
       </div>
       <el-form label-width="80px" size="default" style="margin-bottom: 8px;">
         <el-form-item label="办理意见" required>
@@ -405,12 +403,12 @@
     <!-- 流程图弹框 -->
     <el-dialog v-model="flowChartDialogVisible" title="流程图" width="900px" destroy-on-close>
       <div class="flow-chart-container" style="padding: 8px 0;">
-        <div v-for="(node, idx) in issueFlowSequence" :key="node.value" class="flow-node-wrapper">
+        <div v-for="(node, idx) in currentIssueFlowSequence" :key="node.value" class="flow-node-wrapper">
           <div :class="['flow-node-circle', getNodeStatus(node.value, issue.flowNode)]">
             <span class="flow-node-idx">{{ idx + 1 }}</span>
           </div>
           <div class="flow-node-label" :class="{ active: node.value === issue.flowNode }">{{ node.label }}</div>
-          <div v-if="idx < issueFlowSequence.length - 1" :class="['flow-node-line', { done: isNodeDone(node.value, issue.flowNode) }]"></div>
+          <div v-if="idx < currentIssueFlowSequence.length - 1" :class="['flow-node-line', { done: isNodeDone(node.value, issue.flowNode) }]"></div>
         </div>
       </div>
     </el-dialog>
@@ -436,13 +434,15 @@
         </template>
       </div>
       <!-- 未全部更新时提示 -->
-      <div v-if="isLevel2Process && hasSubIssues && !allCollaboratorsUpdated" style="background: #FFF7E6; border: 1px solid #FFE58F; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-        <el-icon style="color: #FAAD14;"><WarningFilled /></el-icon>
-        <span style="font-size: 12px; color: #D48806;">注意：协同处理人须全部完成进展更新且进度为 100% 后，方可提交到下一步流程节点。</span>
-      </div>
       <el-form label-width="90px" size="default">
         <el-form-item label="当前进度" required>
-          <el-slider v-model="progressForm.progress" :min="0" :max="100" show-input style="padding-right: 20px;" />
+          <el-slider
+            v-model="progressForm.progress"
+            :min="0"
+            :max="100"
+            :step="PROGRESS_STEP_PERCENT"
+            show-stops
+          />
         </el-form-item>
         <el-form-item label="进展描述" required>
           <el-input v-model="progressForm.content" type="textarea" :rows="4" placeholder="请输入进展描述内容..." />
@@ -501,8 +501,8 @@
             v-model="collaboratorUpdateForm.progress"
             :min="0"
             :max="100"
-            show-input
-            style="padding-right: 20px;"
+            :step="PROGRESS_STEP_PERCENT"
+            show-stops
           />
         </el-form-item>
         <el-form-item label="进展内容" required>
@@ -523,7 +523,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Upload, Warning, Plus, CircleCheck, WarningFilled, List, Share, User } from '@element-plus/icons-vue'
@@ -533,14 +533,19 @@ import {
   progressLogs,
   subProgressLogs,
   departments,
-  issueFlowSequence,
+  issueTypes,
+  getIssueFlowSequence,
   getIssueFlowSubmitConfig,
   getIssueFlowNodeIndex,
   getRouteAssignee,
   flowRecords,
   getFlowNodeLabel,
+  getFirstFlowNodeAfterSubmit,
+  getSubmitConfirmMessage,
   currentUser,
   getBatchNameByIssueId,
+  PROGRESS_STEP_PERCENT,
+  snapProgressPercent,
 } from '../mock/data'
 
 const route = useRoute()
@@ -559,13 +564,35 @@ if (found) {
 
 const hasSubIssues = computed(() => issue.value?.subIssues?.length > 0)
 
+const isDailyIssue = computed(() => issue.value?.issueType === 'daily')
+
+const issueTypeLabel = computed(() =>
+  issueTypes.find(t => t.value === (issue.value?.issueType || 'survey'))?.label || '',
+)
+
+const currentIssueFlowSequence = computed(() =>
+  getIssueFlowSequence(issue.value?.issueType || 'survey'),
+)
+
 /** 草稿状态：可编辑基本信息并保存/提交办理 */
 const isDraft = computed(() => issue.value?.status === 'draft')
 
-/** 当前为二级办理且未办结时，可维护子问题协同与进展 */
-const isLevel2Process = computed(
-  () => issue.value?.flowNode === 'level2' && issue.value?.status !== 'completed',
-)
+/** 调研问题流程进行中：任意环节均可进入二级办理进展更新 */
+const canAccessLevel2Progress = computed(() => {
+  if (!issue.value) return false
+  if (issue.value.issueType === 'daily') return false
+  if (['draft', 'completed'].includes(issue.value.status)) return false
+  return issue.value.flowNode !== 'initiate' && issue.value.flowNode !== 'completed'
+})
+
+const issueListSectionRef = ref(null)
+
+onMounted(() => {
+  if (route.query.action !== 'progress' || !canAccessLevel2Progress.value) return
+  nextTick(() => {
+    issueListSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
+})
 
 function applyDraftPatch(patch) {
   if (!issue.value) return
@@ -587,9 +614,11 @@ function saveDraft(patch) {
 
 async function submitDraftForFlow(patch) {
   applyDraftPatch(patch)
+  const type = issue.value.issueType || 'survey'
+  const firstNode = getFirstFlowNodeAfterSubmit(type)
   try {
     await ElMessageBox.confirm(
-      '提交后将进入「地市问题确认」环节，且不可再编辑基本信息，是否确认提交？',
+      getSubmitConfirmMessage(type),
       '确认提交办理',
       { type: 'warning', confirmButtonText: '确认提交', cancelButtonText: '取消' },
     )
@@ -599,8 +628,8 @@ async function submitDraftForFlow(patch) {
 
   issue.value.status = 'pending'
   issue.value.statusLabel = '待处理'
-  issue.value.flowNode = 'city_confirm'
-  issue.value.flowNodeLabel = getFlowNodeLabel('city_confirm')
+  issue.value.flowNode = firstNode
+  issue.value.flowNodeLabel = getFlowNodeLabel(firstNode, type)
 
   localFlowRecordAdds.value.unshift({
     id: `submit-${Date.now()}`,
@@ -658,7 +687,7 @@ const mergedIssueRows = computed(() => {
 })
 
 function isCollaboratorComplete(c) {
-  return !!c?.hasUpdated && (c.updateProgress ?? 0) >= 100
+  return !!c?.hasUpdated
 }
 
 function countIncompleteCollaborators(sub) {
@@ -666,39 +695,28 @@ function countIncompleteCollaborators(sub) {
   return sub.collaborators.filter((c) => !isCollaboratorComplete(c)).length
 }
 
-const allCollaboratorsUpdated = computed(() => {
-  if (!isLevel2Process.value) return true
-  if (!issue.value?.subIssues) return true
-  return issue.value.subIssues.every(
-    (sub) => !sub.collaborators?.length || sub.collaborators.every((c) => isCollaboratorComplete(c)),
-  )
-})
-
-const pendingCollaboratorsCount = computed(() => {
-  if (!isLevel2Process.value) return 0
-  if (!issue.value?.subIssues) return 0
-  return issue.value.subIssues.reduce((count, sub) => count + countIncompleteCollaborators(sub), 0)
-})
-
 function isSubIssueAllUpdated(sub) {
   if (!sub.collaborators?.length) return false
   return sub.collaborators.every((c) => isCollaboratorComplete(c))
 }
 
 const flowSubmitConfig = computed(() =>
-  issue.value ? getIssueFlowSubmitConfig(issue.value.flowNode) : { showProgressUpdate: false, routes: [] },
+  issue.value
+    ? getIssueFlowSubmitConfig(issue.value.flowNode, issue.value.issueType || 'survey')
+    : { showProgressUpdate: false, routes: [] },
 )
 const correctionFeedbackNodes = ['level1', 'level2', 'receive_dept_director']
 const canShowCorrectionFeedback = computed(
   () =>
     !!issue.value &&
+    !isDailyIssue.value &&
     issue.value.status !== 'completed' &&
     correctionFeedbackNodes.includes(issue.value.flowNode),
 )
 
 const actionColumnWidth = computed(() => {
   let width = 100
-  if (isLevel2Process.value) width += 76
+  if (canAccessLevel2Progress.value) width += 76
   if (canShowCorrectionFeedback.value) width += 84
   return width
 })
@@ -734,13 +752,7 @@ function getRouteAssigneeInfo(route) {
 
 const selectedRouteAssignee = computed(() => getRouteAssigneeInfo(selectedRoute.value))
 
-const canSubmitFlowStep = computed(() => {
-  if (!selectedRoute.value) return false
-  if (isLevel2Process.value && hasSubIssues.value && !allCollaboratorsUpdated.value && selectedRoute.value.kind === 'forward') {
-    return false
-  }
-  return true
-})
+const canSubmitFlowStep = computed(() => !!selectedRoute.value)
 
 const flowRecordDialogVisible = ref(false)
 const flowChartDialogVisible = ref(false)
@@ -758,11 +770,7 @@ const correctionForm = ref({ content: '' })
 
 function confirmSubmitFlow() {
   if (!canSubmitFlowStep.value) {
-    ElMessage.warning(
-      isLevel2Process.value && hasSubIssues.value
-        ? '尚有协同处理人未完成进展更新或进度未满 100%，无法正向提交，请先督促更新或选择退回类路由。'
-        : '当前无法提交，请检查办理条件。',
-    )
+    ElMessage.warning('请先选择办理路由')
     return
   }
 
@@ -776,8 +784,9 @@ function confirmSubmitFlow() {
   }
 
   const next = route.targetNode
+  const type = issue.value.issueType || 'survey'
   issue.value.flowNode = next
-  issue.value.flowNodeLabel = getFlowNodeLabel(next)
+  issue.value.flowNodeLabel = getFlowNodeLabel(next, type)
 
   if (next === 'completed') {
     issue.value.status = 'completed'
@@ -836,8 +845,9 @@ function submitCorrectionFeedback() {
 }
 
 function getNodeStatus(nodeValue, currentNode) {
-  const cur = getIssueFlowNodeIndex(currentNode)
-  const idx = getIssueFlowNodeIndex(nodeValue)
+  const type = issue.value?.issueType || 'survey'
+  const cur = getIssueFlowNodeIndex(currentNode, type)
+  const idx = getIssueFlowNodeIndex(nodeValue, type)
   if (cur < 0 || idx < 0) return 'pending'
   if (idx < cur) return 'done'
   if (idx === cur) return 'current'
@@ -845,8 +855,9 @@ function getNodeStatus(nodeValue, currentNode) {
 }
 
 function isNodeDone(nodeValue, currentNode) {
-  const cur = getIssueFlowNodeIndex(currentNode)
-  const idx = getIssueFlowNodeIndex(nodeValue)
+  const type = issue.value?.issueType || 'survey'
+  const cur = getIssueFlowNodeIndex(currentNode, type)
+  const idx = getIssueFlowNodeIndex(nodeValue, type)
   if (cur < 0 || idx < 0) return false
   return idx < cur
 }
@@ -931,7 +942,7 @@ const progressForm = ref({
 function openProgressDialog() {
   progressTargetSubIdx.value = null
   progressForm.value = {
-    progress: issue.value?.progress || 0,
+    progress: snapProgressPercent(issue.value?.progress || 0),
     content: '',
   }
   progressDialogVisible.value = true
@@ -942,7 +953,7 @@ function openSubIssueProgressDialog(row) {
   progressTargetSubIdx.value = row.subIdx
   const sub = issue.value.subIssues[row.subIdx]
   progressForm.value = {
-    progress: sub.progress ?? 0,
+    progress: snapProgressPercent(sub.progress ?? 0),
     content: '',
   }
   progressDialogVisible.value = true
@@ -962,10 +973,13 @@ function submitProgress() {
     return
   }
 
+  const progress = snapProgressPercent(progressForm.value.progress)
+  progressForm.value.progress = progress
+
   const subIdx = progressTargetSubIdx.value
   if (subIdx !== null && subIdx >= 0) {
     const sub = issue.value.subIssues[subIdx]
-    sub.progress = progressForm.value.progress
+    sub.progress = progress
     if (sub.status === 'pending') {
       sub.status = 'in_progress'
       sub.statusLabel = '解决中'
@@ -993,7 +1007,7 @@ function submitProgress() {
     return
   }
 
-  issue.value.progress = progressForm.value.progress
+  issue.value.progress = progress
   issue.value.updateDate = new Date().toISOString().split('T')[0]
   localLogs.value.unshift({
     id: Date.now(),
@@ -1002,7 +1016,7 @@ function submitProgress() {
     dept: issue.value.department || currentUser.department,
     deptRole: 'main',
     content: progressForm.value.content,
-    progress: progressForm.value.progress,
+    progress,
     updateType: 'routine',
   })
   ElMessage.success('进展已更新')
@@ -1062,7 +1076,8 @@ function submitCollaboratorUpdate() {
     ElMessage.warning('请输入进展内容')
     return
   }
-  const progress = collaboratorUpdateForm.value.progress ?? 0
+  const progress = snapProgressPercent(collaboratorUpdateForm.value.progress ?? 0)
+  collaboratorUpdateForm.value.progress = progress
   const sub = issue.value.subIssues[currentCollaboratorSubIdx.value]
   const col = sub.collaborators.find(c => c.id === currentCollaborator.value.id)
   if (col) {
@@ -1091,13 +1106,9 @@ function submitCollaboratorUpdate() {
   localSubLogs.value = nextLogs
   collaboratorUpdateVisible.value = false
 
-  if (isCollaboratorComplete(col)) {
-    ElMessage.success(`${currentCollaborator.value.name} 的进展已更新（进度 100%）`)
-    if (isSubIssueAllUpdated(sub)) {
-      ElMessage.success(`子问题 ${sub.id} 的协同处理人已全部达标`)
-    }
-  } else {
-    ElMessage.success(`${currentCollaborator.value.name} 的进展已保存，进度 ${progress}%（需达到 100% 方可提交下一步）`)
+  ElMessage.success(`${currentCollaborator.value.name} 的进展已更新（进度 ${progress}%）`)
+  if (isSubIssueAllUpdated(sub)) {
+    ElMessage.success(`子问题 ${sub.id} 的协同处理人已全部完成进展更新`)
   }
 }
 </script>

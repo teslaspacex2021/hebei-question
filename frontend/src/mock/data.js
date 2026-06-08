@@ -84,10 +84,16 @@ export const organizations = [
   { value: 'hs', label: '衡水分公司', children: [{ value: 'hs_market', label: '市场经营部' }] },
 ]
 
+// ===== 问题类型 =====
+export const issueTypes = [
+  { value: 'survey', label: '调研问题' },
+  { value: 'daily', label: '日常问题' },
+]
+
 // ===== 调研问题全流程（1 发起在创建页；以下为 2–11 环节 + 结束）=====
 // 2 地市问题确认 → 3 发起人部门主任 → 4 接单部门主任 → 5 一级办理 → 6 二级办理
 // → 7 部门主任 → 8 发起人确认 → 9 地市区县评价 → 10 发起人确认（终验，可退回二级）→ 11 结束
-export const issueFlowSequence = [
+export const surveyIssueFlowSequence = [
   { value: 'initiate', label: '发起', color: '#909399' },
   { value: 'city_confirm', label: '地市问题确认', color: '#409EFF' },
   { value: 'initiator_dept_director', label: '发起人部门主任', color: '#E6A23C' },
@@ -101,8 +107,22 @@ export const issueFlowSequence = [
   { value: 'completed', label: '结束', color: '#909399' },
 ]
 
-/** 与 issueFlowSequence 一致，供列表/领导视图取色 */
-export const flowNodes = issueFlowSequence
+/** 日常问题流程：无地市问题确认、无评价与发起人确认环节 */
+export const dailyIssueFlowSequence = [
+  { value: 'initiate', label: '发起', color: '#909399' },
+  { value: 'initiator_dept_director', label: '发起人部门主任', color: '#E6A23C' },
+  { value: 'receive_dept_director', label: '接单部门主任', color: '#E6A23C' },
+  { value: 'level1', label: '一级办理', color: '#F56C6C' },
+  { value: 'level2', label: '二级办理', color: '#F56C6C' },
+  { value: 'dept_director', label: '部门主任', color: '#722ED1' },
+  { value: 'completed', label: '结束', color: '#909399' },
+]
+
+/** @deprecated 请使用 getIssueFlowSequence(issueType) */
+export const issueFlowSequence = surveyIssueFlowSequence
+
+/** 与调研问题流程一致，供列表/领导视图取色 */
+export const flowNodes = surveyIssueFlowSequence
 
 /** 主流程顺序（不含发起、结束），用于默认「提交至下一环节」 */
 export const issueFlowOrder = [
@@ -117,36 +137,37 @@ export const issueFlowOrder = [
   'initiator_final',
 ]
 
-export function getFlowNodeLabel(value) {
-  const n = issueFlowSequence.find((x) => x.value === value)
+export function getIssueFlowSequence(issueType = 'survey') {
+  return issueType === 'daily' ? dailyIssueFlowSequence : surveyIssueFlowSequence
+}
+
+export function getFlowNodeLabel(value, issueType = 'survey') {
+  const n = getIssueFlowSequence(issueType).find((x) => x.value === value)
   return n ? n.label : value || '—'
+}
+
+/** 提交办理后进入的首个流程节点 */
+export function getFirstFlowNodeAfterSubmit(issueType = 'survey') {
+  return issueType === 'daily' ? 'initiator_dept_director' : 'city_confirm'
+}
+
+export function getSubmitConfirmMessage(issueType = 'survey') {
+  const nodeLabel = getFlowNodeLabel(getFirstFlowNodeAfterSubmit(issueType), issueType)
+  return `提交后将进入「${nodeLabel}」环节，且不可再编辑基本信息，是否确认提交？`
 }
 
 /**
  * 详情页底部：是否可更新办理进展、可选路由（多选时需先选路由再提交办理）
  * kind: forward | return | end
  */
-export function getIssueFlowSubmitConfig(flowNode) {
+export function getIssueFlowSubmitConfig(flowNode, issueType = 'survey') {
   if (!flowNode || flowNode === 'completed' || flowNode === 'initiate') {
     return { showProgressUpdate: false, routes: [] }
   }
 
-  const labelOf = (v) => getFlowNodeLabel(v)
+  const labelOf = (v) => getFlowNodeLabel(v, issueType)
 
-  const configs = {
-    city_confirm: {
-      showProgressUpdate: true,
-      routes: [
-        { value: 'to_initiator_dept', label: `提交至${labelOf('initiator_dept_director')}`, targetNode: 'initiator_dept_director', kind: 'forward' },
-      ],
-    },
-    initiator_dept_director: {
-      showProgressUpdate: false,
-      routes: [
-        { value: 'return_initiator', label: '退回发起人', targetNode: 'city_confirm', kind: 'return' },
-        { value: 'to_receive_dept', label: `提交至${labelOf('receive_dept_director')}`, targetNode: 'receive_dept_director', kind: 'forward' },
-      ],
-    },
+  const sharedConfigs = {
     receive_dept_director: {
       showProgressUpdate: false,
       routes: [
@@ -162,6 +183,44 @@ export function getIssueFlowSubmitConfig(flowNode) {
       showProgressUpdate: true,
       routes: [{ value: 'to_dept_director', label: `提交至${labelOf('dept_director')}`, targetNode: 'dept_director', kind: 'forward' }],
     },
+  }
+
+  if (issueType === 'daily') {
+    const dailyConfigs = {
+      initiator_dept_director: {
+        showProgressUpdate: false,
+        routes: [
+          { value: 'return_initiator', label: '退回发起人', targetNode: 'initiate', kind: 'return' },
+          { value: 'to_receive_dept', label: `提交至${labelOf('receive_dept_director')}`, targetNode: 'receive_dept_director', kind: 'forward' },
+        ],
+      },
+      dept_director: {
+        showProgressUpdate: false,
+        routes: [
+          { value: 'return_level2', label: `退回${labelOf('level2')}`, targetNode: 'level2', kind: 'return' },
+          { value: 'finish', label: '结束', targetNode: 'completed', kind: 'end' },
+        ],
+      },
+      ...sharedConfigs,
+    }
+    return dailyConfigs[flowNode] || { showProgressUpdate: true, routes: [] }
+  }
+
+  const configs = {
+    city_confirm: {
+      showProgressUpdate: true,
+      routes: [
+        { value: 'to_initiator_dept', label: `提交至${labelOf('initiator_dept_director')}`, targetNode: 'initiator_dept_director', kind: 'forward' },
+      ],
+    },
+    initiator_dept_director: {
+      showProgressUpdate: false,
+      routes: [
+        { value: 'return_initiator', label: '退回发起人', targetNode: 'city_confirm', kind: 'return' },
+        { value: 'to_receive_dept', label: `提交至${labelOf('receive_dept_director')}`, targetNode: 'receive_dept_director', kind: 'forward' },
+      ],
+    },
+    ...sharedConfigs,
     dept_director: {
       showProgressUpdate: false,
       routes: [
@@ -191,8 +250,8 @@ export function getIssueFlowSubmitConfig(flowNode) {
 }
 
 /** 流程图节点状态：相对当前环节 */
-export function getIssueFlowNodeIndex(flowNode) {
-  return issueFlowSequence.findIndex((n) => n.value === flowNode)
+export function getIssueFlowNodeIndex(flowNode, issueType = 'survey') {
+  return getIssueFlowSequence(issueType).findIndex((n) => n.value === flowNode)
 }
 
 /**
@@ -821,6 +880,169 @@ const _rawMockIssues = [
     resolved: false,
     subIssues: [],
   },
+  // ===== 日常问题（示例）=====
+  {
+    issueType: 'daily',
+    id: 'RC2026020001',
+    title: '石家庄营业厅排队时长优化',
+    flowNode: 'level2',
+    flowNodeLabel: '二级办理',
+    progress: 65,
+    status: 'in_progress',
+    statusLabel: '解决中',
+    description: '石家庄部分营业厅高峰时段排队超过30分钟，需优化叫号与人员配置',
+    updateDate: '2026-02-10',
+    responsible: '段磊',
+    handler: '段磊',
+    deadline: '2026-03-01',
+    department: '客户服务部',
+    surveyDate: '2026-02-05',
+    surveyLocation: '石家庄',
+    leader: '市场经营部',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-03-01',
+    pinned: false,
+    resolved: false,
+    subIssues: [
+      {
+        id: 'RC2026020001-1', title: '高峰时段人员排班优化', handler: '段磊', status: 'in_progress', statusLabel: '解决中', progress: 70, deadline: '2026-02-28',
+        mainDept: '客户服务部', assistDepts: ['人力资源部'],
+        collaborators: [
+          { id: 'rc1', name: '段磊', dept: '客户服务部', role: 'main', hasUpdated: true, updateProgress: 100, updateContent: '排班方案初稿已完成', updateDate: '2026-02-09' },
+        ],
+      },
+    ],
+  },
+  {
+    issueType: 'daily',
+    id: 'RC2026020002',
+    title: 'CRM系统导出功能异常',
+    flowNode: 'receive_dept_director',
+    flowNodeLabel: '接单部门主任',
+    progress: 10,
+    status: 'pending',
+    statusLabel: '待处理',
+    description: 'CRM批量导出超过500条时超时失败，影响日常报表工作',
+    updateDate: '2026-02-11',
+    responsible: '段磊',
+    handler: '信息技术部主任',
+    deadline: '2026-02-25',
+    department: '信息技术部',
+    surveyDate: '2026-02-11',
+    surveyLocation: '省公司',
+    leader: '信息技术部',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-02-25',
+    pinned: false,
+    resolved: false,
+    subIssues: [],
+  },
+  {
+    issueType: 'daily',
+    id: 'RC2026020004',
+    title: 'VPN客户端批量登录失败',
+    flowNode: 'level1',
+    flowNodeLabel: '一级办理',
+    progress: 35,
+    status: 'in_progress',
+    statusLabel: '解决中',
+    description: '多地员工反馈 VPN 客户端升级后无法登录，需信息技术部排查认证服务',
+    updateDate: '2026-02-14',
+    responsible: '赵刚',
+    handler: '段磊',
+    deadline: '2026-02-20',
+    department: '信息技术部',
+    surveyDate: '2026-02-14',
+    surveyLocation: '省公司',
+    leader: '信息技术部',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-02-20',
+    pinned: false,
+    resolved: false,
+    subIssues: [],
+  },
+  {
+    issueType: 'daily',
+    id: 'RC2026020005',
+    title: '财务报销系统附件上传异常',
+    flowNode: 'level2',
+    flowNodeLabel: '二级办理',
+    progress: 50,
+    status: 'in_progress',
+    statusLabel: '解决中',
+    description: '报销单附件超过 10MB 时上传失败，影响月底集中报销',
+    updateDate: '2026-02-13',
+    responsible: '韩雪',
+    handler: '信息技术部',
+    deadline: '2026-02-22',
+    department: '信息技术部',
+    surveyDate: '2026-02-13',
+    surveyLocation: '省公司',
+    leader: '财务管理部',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-02-22',
+    pinned: false,
+    resolved: false,
+    subIssues: [
+      {
+        id: 'RC2026020005-1',
+        title: '附件分片上传改造',
+        handler: '段磊',
+        status: 'in_progress',
+        statusLabel: '解决中',
+        progress: 55,
+        deadline: '2026-02-22',
+        mainDept: '信息技术部',
+        assistDepts: ['财务管理部'],
+        collaborators: [
+          {
+            id: 'rc5',
+            name: '段磊',
+            dept: '信息技术部',
+            role: 'main',
+            hasUpdated: false,
+            updateProgress: 0,
+            updateContent: '',
+            updateDate: '',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    issueType: 'daily',
+    id: 'RC2026020003',
+    title: '办公耗材采购周期过长（草稿）',
+    flowNode: 'initiate',
+    flowNodeLabel: '发起',
+    progress: 0,
+    status: 'draft',
+    statusLabel: '草稿',
+    description: '行政后勤部反馈耗材采购审批周期平均15天，需缩短至7天内',
+    updateDate: '2026-02-12',
+    responsible: '段磊',
+    handler: '',
+    deadline: '2026-03-15',
+    department: '行政后勤部',
+    surveyDate: '2026-02-12',
+    surveyLocation: '省公司',
+    leader: '行政后勤部',
+    satisfaction: 0,
+    supervised: false,
+    replyContent: '',
+    expectedComplete: '2026-03-15',
+    pinned: false,
+    resolved: false,
+    subIssues: [],
+  },
 ]
 
 const ASSIST_DEPT_POOL = ['信息技术部', '市场经营部', '综合办公室', '行政后勤部', '人力资源部']
@@ -902,6 +1124,7 @@ function buildGeneratedSubIssue(issue, slot) {
 /** 每条主问题固定 3 条子问题，便于详情页问题清单区分（草稿状态保留原始子问题，可为空） */
 function ensureThreeSubIssues(issue) {
   if (issue.status === 'draft') return issue.subIssues || []
+  if (issue.issueType === 'daily') return issue.subIssues || []
   const map = new Map((issue.subIssues || []).map((s) => [s.id, s]))
   for (let slot = 1; slot <= 3; slot += 1) {
     const sid = `${issue.id}-${slot}`
@@ -928,6 +1151,7 @@ function withCollaboratorProgress(issue) {
 export const mockIssues = _rawMockIssues
   .map((issue) => ({
     ...issue,
+    issueType: issue.issueType || 'survey',
     subIssues: ensureThreeSubIssues(issue),
   }))
   .map(withCollaboratorProgress)
@@ -1547,6 +1771,65 @@ export const planTodos = [
     createDate: '2025-11-10',
     submitDate: '2025-11-20',
     content: '已补充完成信创替换路线图调研，覆盖OS、数据库与办公套件三类。',
+  },
+]
+
+/** 调研问题进展更新步长（%） */
+export const PROGRESS_STEP_PERCENT = 5
+
+/** 调研问题系统主动发起进展更新待办的周期（天） */
+export const PROGRESS_UPDATE_INTERVAL_DAYS = 15
+
+export function snapProgressPercent(value) {
+  const n = Number(value)
+  if (Number.isNaN(n)) return 0
+  return Math.min(100, Math.max(0, Math.round(n / PROGRESS_STEP_PERCENT) * PROGRESS_STEP_PERCENT))
+}
+
+/** 生成半月进展更新待办标题中的周期描述 */
+export function getProgressUpdatePeriodLabel(date = new Date()) {
+  const d = new Date(date)
+  const year = d.getFullYear()
+  const month = d.getMonth() + 1
+  const half = d.getDate() <= 15 ? '上半月' : '下半月'
+  return `${year}年${month}月${half}进展更新`
+}
+
+// ===== 调研问题半月进展更新待办（系统每半个月自动发起）=====
+export const progressUpdateTodos = [
+  {
+    id: 'PU2026020001',
+    issueId: 'DY2026020001',
+    issueTitle: '石家庄分公司5G网络覆盖优化方案',
+    handler: '段磊',
+    status: 'pending',
+    statusLabel: '待更新',
+    periodLabel: '2026年2月上半月进展更新',
+    deadline: '2026-02-23',
+    createDate: '2026-02-09',
+  },
+  {
+    id: 'PU2026020002',
+    issueId: 'DY2026020002',
+    issueTitle: '保定客户投诉处理机制完善',
+    handler: '何天坤',
+    status: 'pending',
+    statusLabel: '待更新',
+    periodLabel: '2026年2月上半月进展更新',
+    deadline: '2026-02-23',
+    createDate: '2026-02-09',
+  },
+  {
+    id: 'PU2026010001',
+    issueId: 'DY2026020001',
+    issueTitle: '石家庄分公司5G网络覆盖优化方案',
+    handler: '段磊',
+    status: 'completed',
+    statusLabel: '已更新',
+    periodLabel: '2026年1月下半月进展更新',
+    deadline: '2026-01-31',
+    createDate: '2026-01-16',
+    completedDate: '2026-01-28',
   },
 ]
 

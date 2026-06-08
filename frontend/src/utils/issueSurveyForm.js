@@ -55,31 +55,52 @@ function locationLabelsFromPath(options, path) {
   return labels
 }
 
+function buildIssueRowFromSub(sub, issue, primaryDept) {
+  return {
+    __key: keyCounter++,
+    resolved: false,
+    category: issue.category || '',
+    content: sub.title || '',
+    mainDept: deptValueFromLabel(sub.mainDept || issue.department),
+    otherDepts: (sub.assistDepts || []).map(deptValueFromLabel).filter(Boolean),
+    expectedDate: sub.deadline || issue.deadline || '',
+    resolvedRemark: '',
+  }
+}
+
 export function issueToSurveyForm(issue, locationOptions) {
   const locationPath = findLocationPath(locationOptions, issue.surveyLocation)
   const primaryDept = deptValueFromLabel(issue.department)
 
-  const issues = issue.subIssues?.length
-    ? issue.subIssues.map(sub => ({
-        __key: keyCounter++,
-        resolved: false,
-        category: issue.category || '',
-        content: sub.title || '',
-        mainDept: deptValueFromLabel(sub.mainDept || issue.department),
-        otherDepts: (sub.assistDepts || []).map(deptValueFromLabel).filter(Boolean),
-        expectedDate: sub.deadline || issue.deadline || '',
-        resolvedRemark: '',
-      }))
-    : [{
-        __key: keyCounter++,
-        resolved: !!issue.resolved,
-        category: issue.category || '',
-        content: issue.description || issue.title || '',
-        mainDept: primaryDept,
-        otherDepts: [],
-        expectedDate: issue.deadline || issue.expectedComplete || '',
-        resolvedRemark: issue.replyContent || '',
-      }]
+  let issues
+  if (issue.issueType === 'daily') {
+    const sub = issue.subIssues?.[0]
+    issues = sub
+      ? [buildIssueRowFromSub(sub, issue, primaryDept)]
+      : [{
+          __key: keyCounter++,
+          resolved: false,
+          category: '',
+          content: issue.description || issue.title || '',
+          mainDept: primaryDept,
+          otherDepts: [],
+          expectedDate: issue.deadline || issue.expectedComplete || '',
+          resolvedRemark: '',
+        }]
+  } else if (issue.subIssues?.length) {
+    issues = issue.subIssues.map(sub => buildIssueRowFromSub(sub, issue, primaryDept))
+  } else {
+    issues = [{
+      __key: keyCounter++,
+      resolved: !!issue.resolved,
+      category: issue.category || '',
+      content: issue.description || issue.title || '',
+      mainDept: primaryDept,
+      otherDepts: [],
+      expectedDate: issue.deadline || issue.expectedComplete || '',
+      resolvedRemark: issue.replyContent || '',
+    }]
+  }
 
   return {
     startDate: issue.surveyDate || '',
@@ -91,18 +112,21 @@ export function issueToSurveyForm(issue, locationOptions) {
   }
 }
 
-export function surveyFormToIssuePatch(form, locationOptions, existingIssue = null) {
+export function surveyFormToIssuePatch(form, locationOptions, existingIssue = null, issueType = 'survey') {
   const locationLabels = locationLabelsFromPath(locationOptions, form.location)
   const surveyLocation = locationLabels.length
     ? locationLabels[locationLabels.length - 1]
     : (existingIssue?.surveyLocation || '')
-  const primary = form.issues.find(i => !i.resolved) || form.issues[0]
-  const category = primary?.category || existingIssue?.category || ''
-  const categoryLabel = issueCategories.find(c => c.value === category)?.label || existingIssue?.categoryLabel || ''
+  const issueRows = issueType === 'daily' ? form.issues.slice(0, 1) : form.issues
+  const primary = issueRows.find(i => !i.resolved) || issueRows[0]
+  const category = issueType === 'daily' ? (existingIssue?.category || '') : (primary?.category || existingIssue?.category || '')
+  const categoryLabel = issueType === 'daily'
+    ? (existingIssue?.categoryLabel || '')
+    : (issueCategories.find(c => c.value === category)?.label || existingIssue?.categoryLabel || '')
   const mainDeptLabel = departments.find(d => d.value === primary?.mainDept)?.label || existingIssue?.department || ''
 
-  const subIssues = form.issues
-    .filter(i => !i.resolved && i.content?.trim())
+  const subIssues = issueRows
+    .filter(i => (issueType === 'daily' ? i.content?.trim() : !i.resolved && i.content?.trim()))
     .map((item, idx) => ({
       id: existingIssue?.subIssues?.[idx]?.id || `${existingIssue?.id || 'DRAFT'}-S${idx + 1}`,
       title: item.content,
@@ -116,9 +140,14 @@ export function surveyFormToIssuePatch(form, locationOptions, existingIssue = nu
       collaborators: existingIssue?.subIssues?.[idx]?.collaborators || [],
     }))
 
+  const defaultTitle = issueType === 'daily'
+    ? (primary?.content || existingIssue?.title || '未命名日常问题')
+    : (form.batchTitle || primary?.content || existingIssue?.title || '未命名问题')
+
   return {
-    title: form.batchTitle || primary?.content || existingIssue?.title || '未命名问题',
-    batchTitle: form.batchTitle,
+    issueType: issueType || existingIssue?.issueType || 'survey',
+    title: defaultTitle,
+    batchTitle: issueType === 'daily' ? '' : form.batchTitle,
     surveyDate: form.startDate,
     expectedComplete: form.endDate || primary?.expectedDate || '',
     deadline: primary?.expectedDate || form.endDate || existingIssue?.deadline || '',
@@ -128,19 +157,28 @@ export function surveyFormToIssuePatch(form, locationOptions, existingIssue = nu
     categoryLabel,
     department: mainDeptLabel || existingIssue?.department || '',
     description: primary?.content || existingIssue?.description || '',
-    resolved: form.issues.every(i => i.resolved),
+    resolved: issueType === 'daily' ? false : form.issues.every(i => i.resolved),
     replyContent: form.issues.find(i => i.resolved)?.resolvedRemark || existingIssue?.replyContent || '',
     subIssues,
     updateDate: new Date().toISOString().split('T')[0],
   }
 }
 
-export function validateSurveyForm(form) {
-  if (!form.batchTitle?.trim()) return '请填写调研批次标题'
+export function validateSurveyForm(form, issueType = 'survey') {
+  if (issueType !== 'daily' && !form.batchTitle?.trim()) return '请填写调研批次标题'
   if (!form.startDate) return '请选择调研开始时间'
   if (!form.endDate) return '请选择调研结束时间'
   if (!form.location?.length) return '请选择调研地点'
   if (!form.leader) return '请选择调研领导/部门'
+
+  if (issueType === 'daily') {
+    if (form.issues.length !== 1) return '日常问题每次仅可填报一条'
+    const item = form.issues[0]
+    if (!item.content?.trim() || !item.mainDept || !item.expectedDate) {
+      return '请填写完整信息（问题内容、主要答复部门、期望答复时间）'
+    }
+    return ''
+  }
 
   const resolvedIssues = form.issues.filter(i => i.resolved)
   const unresolvedIssues = form.issues.filter(i => !i.resolved)

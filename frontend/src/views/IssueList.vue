@@ -1,5 +1,11 @@
 <template>
   <div>
+    <!-- 模块切换 -->
+    <el-tabs v-model="moduleTab" class="issue-module-tabs" @tab-change="onModuleTabChange">
+      <el-tab-pane label="调研问题" name="survey" />
+      <el-tab-pane label="日常问题" name="daily" />
+    </el-tabs>
+
     <!-- 统计卡片（与工作台一致，按问题状态） -->
     <div class="stats-row">
       <div class="stat-card" style="cursor: pointer;" @click="activeTab = 'all'">
@@ -38,7 +44,7 @@
           <div class="stat-label">已完成</div>
         </div>
       </div>
-      <div class="stat-card" style="cursor: pointer;">
+      <div class="stat-card" v-if="moduleTab !== 'daily'" style="cursor: pointer;">
         <div class="stat-icon" style="background: #F0E6FF; color: #722ED1;">
           <el-icon :size="22"><StarFilled /></el-icon>
         </div>
@@ -77,7 +83,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="batchTitle" label="所属调研批次" min-width="180" show-overflow-tooltip>
+        <el-table-column prop="batchTitle" v-if="moduleTab === 'survey'" label="所属调研批次" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             <span :style="{ color: row.batchTitle && row.batchTitle !== '—' ? '#595959' : '#bfbfbf' }">
               {{ row.batchTitle || '—' }}
@@ -96,7 +102,7 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="进度" width="90">
+        <el-table-column v-if="moduleTab !== 'daily'" label="进度" width="90">
           <template #default="{ row }">
             <el-progress :percentage="row.progress" :stroke-width="6" :show-text="true" style="width: 70px;" />
           </template>
@@ -106,7 +112,7 @@
             <span :class="'status-tag status-' + row.status">{{ row.statusLabel }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="description" label="进展描述" min-width="100" show-overflow-tooltip />
+        <el-table-column v-if="moduleTab !== 'daily'" prop="description" label="进展描述" min-width="100" show-overflow-tooltip />
         <el-table-column prop="updateDate" label="更新日期" width="100" sortable>
           <template #default="{ row }">
             <span :style="{ color: isOverdue(row) ? '#F5222D' : '#333' }">{{ row.updateDate }}</span>
@@ -148,7 +154,13 @@
       </div>
       <el-form label-width="90px" size="default">
         <el-form-item label="当前进度" required>
-          <el-slider v-model="progressForm.progress" :min="0" :max="100" show-input style="padding-right: 20px;" />
+          <el-slider
+            v-model="progressForm.progress"
+            :min="0"
+            :max="100"
+            :step="PROGRESS_STEP_PERCENT"
+            show-stops
+          />
         </el-form-item>
         <el-form-item label="进展描述" required>
           <el-input v-model="progressForm.content" type="textarea" :rows="4" placeholder="请输入进展描述内容..." />
@@ -168,19 +180,39 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Filter, Setting, Upload, Top } from '@element-plus/icons-vue'
-import { mockIssues, flowNodes, progressLogs, getBatchNameByIssueId } from '../mock/data'
+import { mockIssues, getIssueFlowSequence, progressLogs, getBatchNameByIssueId, PROGRESS_STEP_PERCENT, snapProgressPercent } from '../mock/data'
 
+const route = useRoute()
 const router = useRouter()
+const moduleTab = ref(route.query.tab === 'daily' ? 'daily' : 'survey')
 const activeTab = ref('all')
 const searchText = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const progressDialogVisible = ref(false)
 const localIssues = ref(mockIssues.filter(i => i.status !== 'draft'))
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    if (tab === 'daily' || tab === 'survey') {
+      moduleTab.value = tab
+    }
+  },
+)
+
+function onModuleTabChange(tab) {
+  router.replace({ query: { ...route.query, tab } })
+}
+
+function getFlowColor(node) {
+  const fn = getIssueFlowSequence(moduleTab.value).find(f => f.value === node)
+  return fn ? fn.color : '#909399'
+}
 
 function flattenIssuesForList(issues) {
   const rows = []
@@ -243,7 +275,11 @@ const progressForm = ref({
 })
 
 const filteredIssues = computed(() => {
-  let list = [...listRows.value]
+  let list = listRows.value.filter(row => {
+    const parent = localIssues.value.find(i => i.id === row.parentId)
+    const type = parent?.issueType || 'survey'
+    return type === moduleTab.value
+  })
   if (activeTab.value === 'pending') {
     list = list.filter(i => i.status === 'pending')
   } else if (activeTab.value === 'in_progress') {
@@ -263,21 +299,26 @@ const filteredIssues = computed(() => {
   })
 })
 
-const totalCount = computed(() => localIssues.value.length)
-const pendingAcceptCount = computed(() => localIssues.value.filter(i => i.status === 'pending').length)
-const inProgressCount = computed(() => localIssues.value.filter(i => i.status === 'in_progress').length)
-const completedCount = computed(() => localIssues.value.filter(i => i.status === 'completed').length)
-const supervisedCount = computed(() => localIssues.value.filter(i => i.supervised).length)
+const totalCount = computed(() =>
+  localIssues.value.filter(i => (i.issueType || 'survey') === moduleTab.value).length,
+)
+const pendingAcceptCount = computed(() =>
+  localIssues.value.filter(i => (i.issueType || 'survey') === moduleTab.value && i.status === 'pending').length,
+)
+const inProgressCount = computed(() =>
+  localIssues.value.filter(i => (i.issueType || 'survey') === moduleTab.value && i.status === 'in_progress').length,
+)
+const completedCount = computed(() =>
+  localIssues.value.filter(i => (i.issueType || 'survey') === moduleTab.value && i.status === 'completed').length,
+)
+const supervisedCount = computed(() =>
+  localIssues.value.filter(i => (i.issueType || 'survey') === moduleTab.value && i.supervised).length,
+)
 const avgSatisfaction = computed(() => {
-  const rated = localIssues.value.filter(i => i.satisfaction > 0)
+  const rated = localIssues.value.filter(i => (i.issueType || 'survey') === moduleTab.value && i.satisfaction > 0)
   if (rated.length === 0) return '—'
   return (rated.reduce((s, i) => s + i.satisfaction, 0) / rated.length).toFixed(1)
 })
-
-function getFlowColor(node) {
-  const fn = flowNodes.find(f => f.value === node)
-  return fn ? fn.color : '#909399'
-}
 
 function isOverdue(row) {
   return row.status !== 'completed' && new Date(row.deadline) < new Date()
@@ -313,16 +354,17 @@ function submitProgress() {
   }
   const row = progressForm.value.issue
   const idx = localIssues.value.findIndex(i => i.id === row.parentId)
+  const progress = snapProgressPercent(progressForm.value.progress)
   if (idx !== -1) {
     const issue = localIssues.value[idx]
     const subIdx = issue.subIssues?.findIndex(s => s.id === row.id)
     if (subIdx != null && subIdx !== -1) {
       issue.subIssues[subIdx] = {
         ...issue.subIssues[subIdx],
-        progress: progressForm.value.progress,
+        progress,
       }
     } else {
-      issue.progress = progressForm.value.progress
+      issue.progress = progress
     }
     localIssues.value[idx] = {
       ...issue,
@@ -333,3 +375,12 @@ function submitProgress() {
   progressDialogVisible.value = false
 }
 </script>
+
+<style scoped>
+.issue-module-tabs {
+  margin-bottom: 12px;
+}
+.issue-module-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+}
+</style>

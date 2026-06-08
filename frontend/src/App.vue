@@ -70,6 +70,7 @@ import {
   supervisionOrders,
   issueOrganizes,
   issueCorrectionTodos,
+  progressUpdateTodos,
   currentUser,
 } from './mock/data'
 
@@ -95,10 +96,33 @@ const personalTodoCount = computed(() => {
 
   mockIssues.forEach(issue => {
     const isParentResponsible = issue.responsible === currentUser.name
+    const isDaily = issue.issueType === 'daily'
+
     if (isParentResponsible && activeStatuses.includes(issue.status) && !seen.has(issue.id)) {
       seen.add(issue.id)
       count += 1
     }
+
+    if (isDaily) {
+      if (!isParentResponsible) {
+        const isHandler = issue.handler?.includes(currentUser.name)
+        if (isHandler && activeStatuses.includes(issue.status) && !seen.has(issue.id)) {
+          seen.add(issue.id)
+          count += 1
+        }
+      }
+      issue.subIssues?.forEach(sub => {
+        if (isParentResponsible) return
+        const isHandler = sub.handler?.includes(currentUser.name)
+        const needUpdate = sub.collaborators?.some(c => c.name === currentUser.name && !c.hasUpdated)
+        if ((isHandler || needUpdate) && activeStatuses.includes(sub.status) && !seen.has(sub.id)) {
+          seen.add(sub.id)
+          count += 1
+        }
+      })
+      return
+    }
+
     issue.subIssues?.forEach(sub => {
       if (isParentResponsible) return
       const isHandler = sub.handler?.includes(currentUser.name)
@@ -130,6 +154,20 @@ const personalTodoCount = computed(() => {
 
   issueCorrectionTodos
     .filter(item => item.handler === currentUser.name && ['pending', 'in_progress', 'overdue'].includes(item.status))
+    .forEach(item => {
+      if (!seen.has(item.id)) {
+        seen.add(item.id)
+        count += 1
+      }
+    })
+
+  progressUpdateTodos
+    .filter(
+      item =>
+        item.handler === currentUser.name &&
+        item.status === 'pending' &&
+        (mockIssues.find(i => i.id === item.issueId)?.issueType || 'survey') === 'survey',
+    )
     .forEach(item => {
       if (!seen.has(item.id)) {
         seen.add(item.id)

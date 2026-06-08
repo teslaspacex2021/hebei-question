@@ -1,23 +1,23 @@
 <template>
   <div class="issue-form-editor">
     <div class="form-card">
-      <div class="form-section-title">调研信息</div>
+      <div class="form-section-title">{{ isDaily ? '基本信息' : '调研信息' }}</div>
       <el-form :model="form" label-width="120px" label-position="right" size="default">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="调研开始时间" required>
+            <el-form-item :label="isDaily ? '开始时间' : '调研开始时间'" required>
               <el-date-picker v-model="form.startDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%;" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="调研结束时间" required>
+            <el-form-item :label="isDaily ? '结束时间' : '调研结束时间'" required>
               <el-date-picker v-model="form.endDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 100%;" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="调研地点" required>
+            <el-form-item :label="isDaily ? '问题地点' : '调研地点'" required>
               <el-cascader
                 v-model="form.location"
                 :options="locationOptions"
@@ -27,7 +27,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="调研领导/部门" required>
+            <el-form-item :label="isDaily ? '发起领导/部门' : '调研领导/部门'" required>
               <el-select v-model="form.leader" placeholder="请选择" style="width: 100%;">
                 <el-option label="张总" value="张总" />
                 <el-option label="李总" value="李总" />
@@ -38,7 +38,7 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row :gutter="16">
+        <el-row v-if="!isDaily" :gutter="16">
           <el-col :span="24">
             <el-form-item label="调研批次标题" required>
               <el-input v-model="form.batchTitle" placeholder="例如：2026年1月张总石家庄调研" />
@@ -50,8 +50,8 @@
 
     <div class="form-card">
       <div class="issue-form-toolbar">
-        <div class="form-section-title issue-form-toolbar__title">问题填报</div>
-        <div class="issue-form-toolbar__actions">
+        <div class="form-section-title issue-form-toolbar__title">{{ isDaily ? '日常问题' : '问题填报' }}</div>
+        <div v-if="!isDaily" class="issue-form-toolbar__actions">
           <el-button size="small" @click="downloadTemplate">
             <el-icon><Download /></el-icon> 下载模板
           </el-button>
@@ -64,6 +64,7 @@
             <el-icon><Plus /></el-icon> 新增问题
           </el-button>
         </div>
+        <p v-else class="issue-form-daily-hint">每次发起仅可填报一条日常问题</p>
       </div>
 
       <el-table
@@ -73,7 +74,7 @@
         :header-cell-style="{ background: '#f5f7fa', color: '#333', fontWeight: 600, padding: '10px 0' }"
         row-key="__key"
       >
-        <el-table-column label="问题状态" width="170" align="center">
+        <el-table-column v-if="!isDaily" label="问题状态" width="170" align="center">
           <template #default="{ row }">
             <el-select v-model="row.resolved" placeholder="选择状态" style="width: 140px;" @change="onResolvedChange(row)">
               <el-option :value="false" label="未解决（进入流程）" />
@@ -81,7 +82,7 @@
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column label="问题分类" width="140">
+        <el-table-column v-if="!isDaily" label="问题分类" width="140">
           <template #default="{ row }">
             <el-select v-model="row.category" placeholder="选择分类" style="width: 120px;" :disabled="row.resolved">
               <el-option v-for="c in categories" :key="c.value" :label="c.label" :value="c.value" />
@@ -95,7 +96,7 @@
         </el-table-column>
         <el-table-column label="主要答复部门" width="140">
           <template #default="{ row }">
-            <el-select v-if="!row.resolved" v-model="row.mainDept" placeholder="选择部门" style="width: 120px;">
+            <el-select v-if="isDaily || !row.resolved" v-model="row.mainDept" placeholder="选择部门" style="width: 120px;">
               <el-option v-for="d in departments" :key="d.value" :label="d.label" :value="d.value" />
             </el-select>
             <span v-else style="color: #999; font-size: 12px;">—</span>
@@ -103,7 +104,7 @@
         </el-table-column>
         <el-table-column label="配合部门" width="160">
           <template #default="{ row }">
-            <el-select v-if="!row.resolved" v-model="row.otherDepts" multiple collapse-tags placeholder="选择" style="width: 140px;">
+            <el-select v-if="isDaily || !row.resolved" v-model="row.otherDepts" multiple collapse-tags placeholder="选择" style="width: 140px;">
               <el-option v-for="d in departments" :key="d.value" :label="d.label" :value="d.value" />
             </el-select>
             <span v-else style="color: #999; font-size: 12px;">—</span>
@@ -111,17 +112,17 @@
         </el-table-column>
         <el-table-column label="期望答复时间" width="160">
           <template #default="{ row }">
-            <el-date-picker v-if="!row.resolved" v-model="row.expectedDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 140px;" />
+            <el-date-picker v-if="isDaily || !row.resolved" v-model="row.expectedDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 140px;" />
             <span v-else style="color: #999; font-size: 12px;">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="解决说明" min-width="180">
+        <el-table-column v-if="!isDaily" label="解决说明" min-width="180">
           <template #default="{ row }">
             <el-input v-if="row.resolved" v-model="row.resolvedRemark" type="textarea" :autosize="{ minRows: 1, maxRows: 3 }" placeholder="请输入解决说明" />
             <span v-else style="color: #999; font-size: 12px;">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="60" align="center" fixed="right">
+        <el-table-column v-if="!isDaily" label="操作" width="60" align="center" fixed="right">
           <template #default="{ $index }">
             <el-button v-if="form.issues.length > 1" type="danger" link size="small" @click="removeIssueItem($index)">
               <el-icon><Delete /></el-icon>
@@ -144,7 +145,7 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { reactive, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download, Upload, Plus, Delete, Check, DocumentChecked } from '@element-plus/icons-vue'
 import { issueCategories, departments } from '../mock/data'
@@ -158,9 +159,12 @@ import {
 
 const props = defineProps({
   issue: { type: Object, default: null },
+  issueType: { type: String, default: 'survey' },
   submitLabel: { type: String, default: '提交' },
   showDraftIcon: { type: Boolean, default: false },
 })
+
+const isDaily = computed(() => props.issueType === 'daily' || props.issue?.issueType === 'daily')
 
 const emit = defineEmits(['cancel', 'save-draft', 'submit'])
 
@@ -203,6 +207,19 @@ watch(
   { immediate: true, deep: true },
 )
 
+watch(
+  () => isDaily.value,
+  (daily) => {
+    if (!daily) return
+    if (form.issues.length > 1) {
+      form.issues.splice(1)
+    }
+    if (!form.issues.length) {
+      form.issues.push(createEmptyIssueRow())
+    }
+  },
+)
+
 function onResolvedChange(row) {
   if (row.resolved) {
     row.category = ''
@@ -215,6 +232,10 @@ function onResolvedChange(row) {
 }
 
 function addIssueItem() {
+  if (isDaily.value) {
+    ElMessage.warning('日常问题每次仅可填报一条')
+    return
+  }
   form.issues.push(createEmptyIssueRow())
 }
 
@@ -227,11 +248,17 @@ function downloadTemplate() {
 }
 
 function buildPayload() {
-  return surveyFormToIssuePatch(form, locationOptions, props.issue)
+  return surveyFormToIssuePatch(form, locationOptions, props.issue, isDaily.value ? 'daily' : 'survey')
 }
 
 function handleSaveDraft() {
-  if (!form.batchTitle?.trim() && !form.issues.some(i => i.content?.trim())) {
+  const hasContent = form.issues.some(i => i.content?.trim())
+  if (isDaily.value) {
+    if (!hasContent) {
+      ElMessage.warning('请至少填写一条问题内容')
+      return
+    }
+  } else if (!form.batchTitle?.trim() && !hasContent) {
     ElMessage.warning('请至少填写调研批次标题或问题内容')
     return
   }
@@ -239,7 +266,7 @@ function handleSaveDraft() {
 }
 
 function handleSubmit() {
-  const error = validateSurveyForm(form)
+  const error = validateSurveyForm(form, isDaily.value ? 'daily' : 'survey')
   if (error) {
     ElMessage.warning(error)
     return
@@ -267,6 +294,11 @@ defineExpose({ form, buildPayload })
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+.issue-form-daily-hint {
+  margin: 0;
+  font-size: 12px;
+  color: #999;
 }
 .issue-form-footer {
   display: flex;

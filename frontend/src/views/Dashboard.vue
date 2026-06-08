@@ -112,9 +112,18 @@
               :value="t"
             />
           </el-select>
-          <el-button type="primary" size="default" style="margin-left: 8px;" @click="router.push('/issues/create')">
-            <el-icon><Plus /></el-icon> 新建问题
-          </el-button>
+          <el-dropdown trigger="click" @command="goCreateIssue">
+            <el-button type="primary" size="default" style="margin-left: 8px;">
+              <el-icon><Plus /></el-icon> 新建问题
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="survey">发起调研问题</el-dropdown-item>
+                <el-dropdown-item command="daily">发起日常问题</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </div>
       <el-table
@@ -218,7 +227,7 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Plus } from '@element-plus/icons-vue'
+import { Search, Plus, ArrowDown } from '@element-plus/icons-vue'
 import {
   mockIssues,
   planTodos,
@@ -226,11 +235,17 @@ import {
   supervisionOrders,
   issueOrganizes,
   issueCorrectionTodos,
+  progressUpdateTodos,
   departments,
   getBatchNameByIssueId,
 } from '../mock/data'
 
 const router = useRouter()
+
+function goCreateIssue(type) {
+  router.push({ path: '/issues/create', query: { type: type || 'survey' } })
+}
+
 const localIssues = ref([...mockIssues])
 const processedCorrectionIds = ref(new Set())
 const correctionProcessTimes = ref({})
@@ -285,20 +300,68 @@ const personalTodos = computed(() => {
     const isParentResponsible = issue.responsible === currentUser.name
     const batchName = getBatchNameByIssueId(issue.id) || '—'
 
+    const isDaily = issue.issueType === 'daily'
+    const issueTypeLabel = isDaily ? '日常问题处理' : '调研问题处理'
+
     if (isParentResponsible && activeStatuses.includes(issue.status) && !seen.has(issue.id)) {
       todos.push({
         id: issue.id,
         title: issue.title,
         type: 'issue',
-        typeLabel: '调研问题处理',
+        typeLabel: issueTypeLabel,
         currentStage: issue.flowNodeLabel || '—',
         status: issue.status,
         statusLabel: issue.statusLabel,
-        batch: batchName,
+        batch: isDaily ? '—' : batchName,
         time: issue.updateDate,
         link: `/issues/${issue.id}`,
       })
       seen.add(issue.id)
+    }
+
+    if (isDaily) {
+      if (!isParentResponsible) {
+        const isHandler = issue.handler?.includes(currentUser.name)
+        if (isHandler && activeStatuses.includes(issue.status) && !seen.has(issue.id)) {
+          todos.push({
+            id: issue.id,
+            title: issue.title,
+            type: 'issue',
+            typeLabel: issueTypeLabel,
+            currentStage: issue.flowNodeLabel || '—',
+            status: issue.status,
+            statusLabel: issue.statusLabel,
+            batch: '—',
+            time: issue.updateDate,
+            link: `/issues/${issue.id}`,
+          })
+          seen.add(issue.id)
+        }
+      }
+
+      issue.subIssues?.forEach(sub => {
+        if (isParentResponsible) return
+
+        const isHandler = sub.handler?.includes(currentUser.name)
+        const needUpdate = sub.collaborators?.some(c => c.name === currentUser.name && !c.hasUpdated)
+        if ((isHandler || needUpdate) && activeStatuses.includes(sub.status) && !seen.has(sub.id)) {
+          const collaborator = sub.collaborators?.find(c => c.name === currentUser.name)
+          todos.push({
+            id: sub.id,
+            title: `${issue.title} - ${sub.title}`,
+            type: 'issue',
+            typeLabel: issueTypeLabel,
+            currentStage: issue.flowNodeLabel || '—',
+            status: sub.status,
+            statusLabel: sub.statusLabel,
+            batch: '—',
+            time: collaborator?.updateDate || issue.updateDate,
+            link: `/issues/${issue.id}`,
+          })
+          seen.add(sub.id)
+        }
+      })
+      return
     }
 
     issue.subIssues?.forEach(sub => {
@@ -312,7 +375,7 @@ const personalTodos = computed(() => {
           id: sub.id,
           title: `${issue.title} - ${sub.title}`,
           type: 'issue',
-          typeLabel: '调研问题处理',
+          typeLabel: issueTypeLabel,
           currentStage: issue.flowNodeLabel || '—',
           status: sub.status,
           statusLabel: sub.statusLabel,
@@ -392,6 +455,30 @@ const personalTodos = computed(() => {
       seen.add(item.id)
     })
 
+  progressUpdateTodos
+    .filter(
+      item =>
+        item.handler === currentUser.name &&
+        item.status === 'pending' &&
+        (localIssues.value.find(i => i.id === item.issueId)?.issueType || 'survey') === 'survey',
+    )
+    .forEach(item => {
+      if (seen.has(item.id)) return
+      todos.push({
+        id: item.id,
+        title: `${item.issueTitle} — ${item.periodLabel}`,
+        type: 'progress_update',
+        typeLabel: '进展更新',
+        currentStage: '二级办理进展填报',
+        status: item.status,
+        statusLabel: item.statusLabel || '待更新',
+        batch: getBatchNameByIssueId(item.issueId) || '—',
+        time: item.deadline || item.createDate,
+        link: `/issues/${item.issueId}?action=progress`,
+      })
+      seen.add(item.id)
+    })
+
   return todos
 })
 
@@ -420,20 +507,65 @@ const personalDone = computed(() => {
   localIssues.value.forEach(issue => {
     const isParentResponsible = issue.responsible === currentUser.name
     const batchName = getBatchNameByIssueId(issue.id) || '—'
+    const isDaily = issue.issueType === 'daily'
+    const issueTypeLabel = isDaily ? '日常问题处理' : '调研问题处理'
+
     if (isParentResponsible && issue.status === 'completed' && !seen.has(issue.id)) {
       dones.push({
         id: issue.id,
         title: issue.title,
         type: 'issue',
-        typeLabel: '调研问题处理',
+        typeLabel: issueTypeLabel,
         currentStage: issue.flowNodeLabel || '已办结',
         status: issue.status,
         statusLabel: issue.statusLabel,
-        batch: batchName,
+        batch: isDaily ? '—' : batchName,
         time: issue.updateDate,
         link: `/issues/${issue.id}`,
       })
       seen.add(issue.id)
+    }
+
+    if (isDaily) {
+      if (!isParentResponsible) {
+        const isHandler = issue.handler?.includes(currentUser.name)
+        if (isHandler && issue.status === 'completed' && !seen.has(issue.id)) {
+          dones.push({
+            id: issue.id,
+            title: issue.title,
+            type: 'issue',
+            typeLabel: issueTypeLabel,
+            currentStage: issue.flowNodeLabel || '已办结',
+            status: issue.status,
+            statusLabel: issue.statusLabel,
+            batch: '—',
+            time: issue.updateDate,
+            link: `/issues/${issue.id}`,
+          })
+          seen.add(issue.id)
+        }
+      }
+
+      issue.subIssues?.forEach(sub => {
+        if (isParentResponsible) return
+        const isHandler = sub.handler?.includes(currentUser.name)
+        if (isHandler && sub.status === 'completed' && !seen.has(sub.id)) {
+          dones.push({
+            id: sub.id,
+            title: `${issue.title} - ${sub.title}`,
+            type: 'issue',
+            typeLabel: issueTypeLabel,
+            currentStage: issue.flowNodeLabel || '已办结',
+            status: sub.status,
+            statusLabel: sub.statusLabel,
+            batch: '—',
+            time: issue.updateDate,
+            link: `/issues/${issue.id}`,
+          })
+          seen.add(sub.id)
+        }
+      })
+      return
     }
 
     issue.subIssues?.forEach(sub => {
@@ -444,7 +576,7 @@ const personalDone = computed(() => {
           id: sub.id,
           title: `${issue.title} - ${sub.title}`,
           type: 'issue',
-          typeLabel: '调研问题处理',
+          typeLabel: issueTypeLabel,
           currentStage: issue.flowNodeLabel || '已办结',
           status: sub.status,
           statusLabel: sub.statusLabel,
@@ -514,6 +646,25 @@ const personalDone = computed(() => {
         batch: getBatchNameByIssueId(item.issueId) || '—',
         issueId: item.issueId,
         time: correctionProcessTimes.value[item.id] || item.processDate || item.createDate,
+        link: `/issues/${item.issueId}`,
+      })
+      seen.add(item.id)
+    })
+
+  progressUpdateTodos
+    .filter(item => item.handler === currentUser.name && item.status === 'completed')
+    .forEach(item => {
+      if (seen.has(item.id)) return
+      dones.push({
+        id: item.id,
+        title: `${item.issueTitle} — ${item.periodLabel}`,
+        type: 'progress_update',
+        typeLabel: '进展更新',
+        currentStage: '已更新',
+        status: 'completed',
+        statusLabel: item.statusLabel || '已更新',
+        batch: getBatchNameByIssueId(item.issueId) || '—',
+        time: item.completedDate || item.deadline || item.createDate,
         link: `/issues/${item.issueId}`,
       })
       seen.add(item.id)

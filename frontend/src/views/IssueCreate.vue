@@ -1,6 +1,7 @@
 <template>
   <div class="form-page">
     <IssueFormEditor
+      :issue-type="issueType"
       @cancel="$router.back()"
       @save-draft="onSaveDraft"
       @submit="onSubmit"
@@ -9,22 +10,42 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import IssueFormEditor from '../components/IssueFormEditor.vue'
 import { mockIssues, currentUser, getFlowNodeLabel } from '../mock/data'
 
+const route = useRoute()
 const router = useRouter()
 
+const issueType = ref(route.query.type === 'daily' ? 'daily' : 'survey')
+
+watch(
+  () => route.query.type,
+  (type) => {
+    if (type === 'daily' || type === 'survey') {
+      issueType.value = type
+    }
+  },
+)
+
+function buildIssueId(type) {
+  const prefix = type === 'daily' ? 'RC' : 'DY'
+  return `${prefix}${Date.now()}`
+}
+
 function onSaveDraft(patch) {
-  const id = `DY${Date.now()}`
+  const type = patch.issueType || issueType.value
+  const id = buildIssueId(type)
   mockIssues.push({
     id,
+    issueType: type,
     title: patch.title,
     category: patch.category,
     categoryLabel: patch.categoryLabel,
     flowNode: 'initiate',
-    flowNodeLabel: getFlowNodeLabel('initiate'),
+    flowNodeLabel: getFlowNodeLabel('initiate', type),
     progress: 0,
     status: 'draft',
     statusLabel: '草稿',
@@ -51,15 +72,16 @@ function onSaveDraft(patch) {
 }
 
 function onSubmit(patch) {
+  const type = patch.issueType || issueType.value
   const unresolvedCount = patch.subIssues?.length || 0
   const resolvedOnly = patch.resolved && unresolvedCount === 0
 
   if (resolvedOnly) {
     ElMessage.success('已解决问题已录入，无需流程审批')
   } else {
-    ElMessage.success(`问题已提交：${unresolvedCount || 1}条进入审批流程`)
+    ElMessage.success(`${type === 'daily' ? '日常' : '调研'}问题已提交：${unresolvedCount || 1}条进入审批流程`)
   }
-  router.push('/issues')
+  router.push(type === 'daily' ? '/issues?tab=daily' : '/issues')
 }
 </script>
 
